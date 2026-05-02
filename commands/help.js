@@ -214,6 +214,13 @@ if (hasPermission(interaction.member, 'annonceevenement')) {
     // =========================
     // SECTIONS
     // =========================
+
+    if (annonceCommands.length) {
+  sections.push({
+    name: '📢 Annonces',
+    value: annonceCommands.join('\n')
+  });
+}
     if (generalCommands.length) {
       sections.push({
         name: '⚙️ Général',
