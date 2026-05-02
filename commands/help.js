@@ -15,6 +15,7 @@ module.exports = {
     const ticketCommands = [];
     const funCommands = [];
     const generalCommands = [];
+    const annonceCommands = [];
 
     // =========================
     // COMMANDES PUBLIQUES
@@ -185,6 +186,30 @@ module.exports = {
     if (hasPermission(interaction.member, 'setupbot')) {
       generalCommands.push('`/setupbot` → Créer les salons logs nécessaires');
     }
+
+    // =========================
+    // ANNONCE
+    // =========================
+
+    if (hasPermission(interaction.member, 'annonceserveur')) {
+  annonceCommands.push('`/annonceserveur` → Annonce avec @everyone');
+}
+
+if (hasPermission(interaction.member, 'annonceillegal')) {
+  annonceCommands.push('`/annonceillegal` → Annonce Illégal');
+}
+
+if (hasPermission(interaction.member, 'annoncelegal')) {
+  annonceCommands.push('`/annoncelegal` → Annonce Légal');
+}
+
+if (hasPermission(interaction.member, 'annoncegiveaways')) {
+  annonceCommands.push('`/annoncegiveaways` → Annonce Giveaways');
+}
+
+if (hasPermission(interaction.member, 'annonceevenement')) {
+  annonceCommands.push('`/annonceevenement` → Annonce Événement');
+}
 
     // =========================
     // SECTIONS
