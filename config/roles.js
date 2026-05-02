@@ -186,5 +186,44 @@ module.exports = {
     'Gérant Staff',
     'Gérant Global',
     'Responsable Staff'
-  ]
+  ],
+
+  // =========================
+  // ANNONCE
+  // =========================
+
+  annonceserveur: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  annonceillegal: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  annoncelegal: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  annoncegiveaways: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  annonceevenement: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],  
 };
