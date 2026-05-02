@@ -4,16 +4,9 @@ const hasPermission = require('../utils/hasPermission');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('help')
-    .setDescription('Affiche les commandes que tu peux utiliser'),
+    .setDescription('Affiche les commandes disponibles'),
 
   async execute(interaction) {
-    if (!hasPermission(interaction.member, 'help')) {
-      return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
-        ephemeral: true
-      });
-    }
-
     const sections = [];
 
     const moderationCommands = [];
@@ -24,7 +17,54 @@ module.exports = {
     const generalCommands = [];
 
     // =========================
-    // MODÉRATION
+    // COMMANDES PUBLIQUES
+    // =========================
+    if (hasPermission(interaction.member, 'help')) {
+      generalCommands.push('`/help` → Afficher ce menu');
+    }
+
+    if (hasPermission(interaction.member, 'userinfo')) {
+      generalCommands.push('`/userinfo` → Infos utilisateur');
+    }
+
+    if (hasPermission(interaction.member, 'serverinfo')) {
+      generalCommands.push('`/serverinfo` → Infos serveur');
+    }
+
+    if (hasPermission(interaction.member, 'invitelogs')) {
+      generalCommands.push('`/invitelogs` → Voir les invitations');
+    }
+
+    if (hasPermission(interaction.member, 'coinflip')) {
+      funCommands.push('`/coinflip` → Pile ou face');
+    }
+
+    if (hasPermission(interaction.member, 'dice')) {
+      funCommands.push('`/dice` → Lancer un dé');
+    }
+
+    if (hasPermission(interaction.member, 'rps')) {
+      funCommands.push('`/rps` → Pierre, feuille, ciseaux');
+    }
+
+    if (hasPermission(interaction.member, 'duel')) {
+      funCommands.push('`/duel` → Duel 1vs1');
+    }
+
+    if (hasPermission(interaction.member, 'rank')) {
+      funCommands.push('`/rank` → Voir ton rank 1vs1');
+    }
+
+    if (hasPermission(interaction.member, 'leaderboard')) {
+      funCommands.push('`/leaderboard` → Classement ranked');
+    }
+
+    if (hasPermission(interaction.member, 'ticketinfo')) {
+      ticketCommands.push('`/ticketinfo` → Voir les infos du ticket');
+    }
+
+    // =========================
+    // COMMANDES STAFF / ADMIN
     // =========================
     if (hasPermission(interaction.member, 'ban')) {
       moderationCommands.push('`/ban` → Bannir un membre');
@@ -62,9 +102,14 @@ module.exports = {
       moderationCommands.push('`/slowmode` → Modifier le slowmode');
     }
 
-    // =========================
-    // AVERTISSEMENTS
-    // =========================
+    if (hasPermission(interaction.member, 'resetrank')) {
+      moderationCommands.push('`/resetrank` → Reset le rank d’un joueur');
+    }
+
+    if (hasPermission(interaction.member, 'resetinvites')) {
+      moderationCommands.push('`/resetinvites` → Reset les invitations');
+    }
+
     if (hasPermission(interaction.member, 'warn')) {
       warnCommands.push('`/warn` → Ajouter un avertissement');
     }
@@ -81,9 +126,6 @@ module.exports = {
       warnCommands.push('`/clearwarns` → Supprimer tous les warns');
     }
 
-    // =========================
-    // RÔLES
-    // =========================
     if (hasPermission(interaction.member, 'addrole')) {
       roleCommands.push('`/addrole` → Ajouter un rôle');
     }
@@ -104,9 +146,6 @@ module.exports = {
       roleCommands.push('`/sendnotifroles` → Envoyer les rôles notifications');
     }
 
-    // =========================
-    // TICKETS
-    // =========================
     if (hasPermission(interaction.member, 'sendticketpanel')) {
       ticketCommands.push('`/sendticketpanel` → Envoyer le panel ticket');
     }
@@ -117,10 +156,6 @@ module.exports = {
 
     if (hasPermission(interaction.member, 'forceclose')) {
       ticketCommands.push('`/forceclose` → Fermer un ticket cassé');
-    }
-
-    if (hasPermission(interaction.member, 'ticketinfo')) {
-      ticketCommands.push('`/ticketinfo` → Voir les infos du ticket');
     }
 
     if (hasPermission(interaction.member, 'addticketmember')) {
@@ -135,63 +170,46 @@ module.exports = {
       ticketCommands.push('`/renameticket` → Renommer un ticket');
     }
 
-    // =========================
-    // MINI-JEUX
-    // =========================
-    if (hasPermission(interaction.member, 'coinflip')) {
-      funCommands.push('`/coinflip` → Pile ou face');
+    if (hasPermission(interaction.member, 'sendinvitepanel')) {
+      generalCommands.push('`/sendinvitepanel` → Envoyer le panel invitations');
     }
 
-    if (hasPermission(interaction.member, 'dice')) {
-      funCommands.push('`/dice` → Lancer un dé');
+    if (hasPermission(interaction.member, 'creategiveaway')) {
+      generalCommands.push('`/creategiveaway` → Créer un giveaway invitations');
     }
 
-    if (hasPermission(interaction.member, 'rps')) {
-      funCommands.push('`/rps` → Pierre, feuille, ciseaux');
+    if (hasPermission(interaction.member, 'endgiveaway')) {
+      generalCommands.push('`/endgiveaway` → Supprimer un giveaway invitations');
     }
 
-    if (hasPermission(interaction.member, 'duel')) {
-      funCommands.push('`/duel` → Duel 1vs1');
-    }
-
-    if (hasPermission(interaction.member, 'rank')) {
-      funCommands.push('`/rank` → Voir ton rank 1vs1');
-    }
-
-    if (hasPermission(interaction.member, 'leaderboard')) {
-      funCommands.push('`/leaderboard` → Classement ranked');
-    }
-
-    // =========================
-    // GÉNÉRAL / ADMIN
-    // =========================
-    if (hasPermission(interaction.member, 'help')) {
-      generalCommands.push('`/help` → Afficher ce menu');
-    }
-
-    if (hasPermission(interaction.member, 'userinfo')) {
-      generalCommands.push('`/userinfo` → Infos utilisateur');
-    }
-
-    if (hasPermission(interaction.member, 'serverinfo')) {
-      generalCommands.push('`/serverinfo` → Infos serveur');
-    }
-
-    if (hasPermission(interaction.member, 'invitelogs')) {
-      generalCommands.push('`/invitelogs` → Voir les invitations');
-    }
-
-    if (hasPermission(interaction.member, 'resetinvites')) {
-      generalCommands.push('`/resetinvites` → Reset les invitations');
-    }
-
-    if (hasPermission(interaction.member, 'resetrank')) {
-      generalCommands.push('`/resetrank` → Reset le rank d’un joueur');
+    if (hasPermission(interaction.member, 'setupbot')) {
+      generalCommands.push('`/setupbot` → Créer les salons logs nécessaires');
     }
 
     // =========================
     // SECTIONS
     // =========================
+    if (generalCommands.length) {
+      sections.push({
+        name: '⚙️ Général',
+        value: generalCommands.join('\n')
+      });
+    }
+
+    if (funCommands.length) {
+      sections.push({
+        name: '🎮 Mini-jeux',
+        value: funCommands.join('\n')
+      });
+    }
+
+    if (ticketCommands.length) {
+      sections.push({
+        name: '🎫 Tickets',
+        value: ticketCommands.join('\n')
+      });
+    }
+
     if (moderationCommands.length) {
       sections.push({
         name: '🔨 Modération',
@@ -213,32 +231,16 @@ module.exports = {
       });
     }
 
-    if (ticketCommands.length) {
-      sections.push({
-        name: '🎫 Tickets',
-        value: ticketCommands.join('\n')
-      });
-    }
-
-    if (funCommands.length) {
-      sections.push({
-        name: '🎮 Mini-jeux',
-        value: funCommands.join('\n')
-      });
-    }
-
-    if (generalCommands.length) {
-      sections.push({
-        name: '⚙️ Général',
-        value: generalCommands.join('\n')
-      });
-    }
-
     const embed = new EmbedBuilder()
       .setTitle('📘 BorzBot • Aide')
       .setDescription('Voici les commandes disponibles selon tes permissions.')
       .setColor(0x5865f2)
-      .addFields(sections)
+      .addFields(sections.length ? sections : [
+        {
+          name: 'Aucune commande',
+          value: 'Aucune commande disponible pour toi.'
+        }
+      ])
       .setFooter({ text: `Demandé par ${interaction.user.tag}` })
       .setTimestamp();
 

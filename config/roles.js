@@ -1,70 +1,190 @@
 module.exports = {
+  // =========================
+  // GÉNÉRAL
+  // =========================
+  help: 'ALL',
+  userinfo: 'ALL',
+  serverinfo: 'ALL',
+  invitelogs: 'ALL',
 
-    forceclose: ['Main Team', 'Gérant Staff', 'Gérant Global', 'Responsable Staff'],
+  // =========================
+  // MINI-JEUX
+  // =========================
+  coinflip: 'ALL',
+  dice: 'ALL',
+  rps: 'ALL',
+  duel: 'ALL',
+  rank: 'ALL',
+  leaderboard: 'ALL',
 
-    addrole: ['Main Team', 'Gérant Staff'],
+  // =========================
+  // TICKETS
+  // =========================
+  ticketinfo: 'ALL',
+  close: 'ALL',
 
-    removerole: ['Main Team', 'Gérant Staff'],
+  sendticketpanel: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
 
-    createrole: ['Main Team'],
+  forceclose: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
 
-    deleterole: ['Main Team'],
+  addticketmember: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
 
-    userinfo: 'ALL',
-    serverinfo: 'ALL',
-    leaderboard: 'ALL',
+  removeticketmember: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
 
-    lock: ['Main Team', 'Gérant Staff', 'Gérant Global', 'Responsable Staff'],
-    unlock: ['Main Team', 'Gérant Staff', 'Gérant Global', 'Responsable Staff'],
-    slowmode: ['Main Team', 'Gérant Staff', 'Gérant Global', 'Responsable Staff'],
-    clearwarns: ['Main Team', 'Gérant Staff', 'Gérant Global', 'Responsable Staff'],
-    ticketinfo: 'ALL',
-    addticketmember: ['Main Team', 'Gérant Staff', 'Gérant Global', 'Responsable Staff'],
-    renameticket: ['Main Team', 'Gérant Staff', 'Gérant Global', 'Responsable Staff'],
-    invitelogs: 'ALL',
+  renameticket: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
 
-resetinvites: [
-  'Main Team',
-  'Gérant Staff',
-  'Gérant Global',
-  'Responsable Staff'
-],
+  // =========================
+  // MODÉRATION
+  // =========================
+  ban: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
 
-    sendticketpanel: [
-        'Onizuka',
-        'BORZ',
-    ],
-    ban: [
-        'Main Team',
-        'Gérant Staff',
-        'Gérant Global',
-        'Responsable Staff'
-    ],
+  unban: [
+    'Main Team',
+    'Gérant Unban'
+  ],
 
-    unban: [
-        'Main Team',
-        'Gérant Unban'
-    ],
+  kick: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff',
+    'Gérant',
+    'Super Admin IG'
+  ],
 
-    kick: [
-        'Main Team',
-        'Gérant Staff',
-        'Gérant Global',
-        'Responsable Staff',
-        'Gérant',
-        'Super Admin IG'
-    ],
-    sendnotifroles: 'ALL',
-    warn: 'ALL',
-    mute: 'ALL',
-    close: 'ALL',
-    help: 'ALL',
-    // mini-jeux
-    coinflip: 'ALL',
-    dice: 'ALL',
-    rps: 'ALL',
-    duel: 'ALL',
-    leaderboard: 'ALL',
-    rank: 'ALL',
-    resetrank: ['Main Team', 'Gérant Staff', 'Gérant Global', 'Responsable Staff'],
+  mute: 'ALL',
+  unmute: 'ALL',
+  warn: 'ALL',
+  unwarn: 'ALL',
+  warnlist: 'ALL',
+  clear: 'ALL',
+
+  clearwarns: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  lock: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  unlock: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  slowmode: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  // =========================
+  // RÔLES
+  // =========================
+  addrole: [
+    'Main Team',
+    'Gérant Staff'
+  ],
+
+  removerole: [
+    'Main Team',
+    'Gérant Staff'
+  ],
+
+  createrole: [
+    'Main Team'
+  ],
+
+  deleterole: [
+    'Main Team'
+  ],
+
+  sendnotifroles: 'ALL',
+
+  // =========================
+  // INVITATIONS / GIVEAWAYS
+  // =========================
+  sendinvitepanel: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  creategiveaway: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  endgiveaway: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  resetinvites: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  // =========================
+  // ADMIN BOT
+  // =========================
+  setupbot: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ],
+
+  resetrank: [
+    'Main Team',
+    'Gérant Staff',
+    'Gérant Global',
+    'Responsable Staff'
+  ]
 };

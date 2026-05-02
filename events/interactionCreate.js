@@ -8,6 +8,9 @@ const {
   ButtonStyle
 } = require('discord.js');
 
+const { getUserInvites, getGuildInvites } = require('../utils/inviteStore');
+const { getActiveGiveaways } = require('../utils/giveawayStore');
+
 const {
   ModalBuilder,
   TextInputBuilder,
@@ -47,6 +50,107 @@ module.exports = {
   async execute(interaction, client) {
     try {
       if (interaction.isStringSelectMenu()) {
+
+        if (interaction.customId === 'invite_panel_menu') {
+          const selected = interaction.values[0];
+
+          if (selected === 'top15') {
+            const guildData = getGuildInvites(interaction.guild.id);
+
+            const leaderboard = Object.entries(guildData)
+              .sort(([, a], [, b]) => b.total - a.total)
+              .slice(0, 15);
+
+            if (leaderboard.length === 0) {
+              return interaction.reply({
+                content: '📨 Aucun invite log enregistré pour le moment.',
+                ephemeral: true
+              });
+            }
+
+            const text = leaderboard
+              .map(([userId, data], index) => {
+                const medal =
+                  index === 0 ? '🥇' :
+                    index === 1 ? '🥈' :
+                      index === 2 ? '🥉' :
+                        `#${index + 1}`;
+
+                return `${medal} <@${userId}> — **${data.total} invitation(s)**`;
+              })
+              .join('\n');
+
+            const embed = new EmbedBuilder()
+              .setTitle('🏆 Top 15 Invitations')
+              .setDescription(text)
+              .setColor(0xfaa61a)
+              .setTimestamp();
+
+            return interaction.reply({
+              embeds: [embed],
+              ephemeral: true
+            });
+          }
+
+          if (selected === 'myinvites') {
+            const data = getUserInvites(interaction.guild.id, interaction.user.id);
+
+            const embed = new EmbedBuilder()
+              .setTitle('📨 Mes invitations')
+              .setDescription(
+                `**Membre :** ${interaction.user}\n` +
+                `**Invitations confirmées :** ${data.total}\n\n` +
+                `**Personnes invitées :**\n` +
+                `${data.users.length > 0 ? data.users.map(id => `• <@${id}>`).join('\n') : 'Aucune'}`
+              )
+              .setColor(0x5865f2)
+              .setTimestamp();
+
+            return interaction.reply({
+              embeds: [embed],
+              ephemeral: true
+            });
+          }
+
+          if (selected === 'giveaways') {
+            const giveaways = getActiveGiveaways(interaction.guild.id);
+
+            if (giveaways.length === 0) {
+              return interaction.reply({
+                content: '🎁 Aucun giveaway en cours pour le moment.',
+                ephemeral: true
+              });
+            }
+
+            const userInvites = getUserInvites(interaction.guild.id, interaction.user.id);
+
+            const text = giveaways
+              .map(g => {
+                const canEnter = userInvites.total >= g.invitesRequired;
+
+                return (
+                  `🎁 **${g.name}**\n` +
+                  `**Récompense :** ${g.reward}\n` +
+                  `**Invitations nécessaires :** ${g.invitesRequired}\n` +
+                  `**Ton total :** ${userInvites.total}\n` +
+                  `**Statut :** ${canEnter ? '✅ Éligible' : '❌ Pas assez d’invitations'}\n` +
+                  `**ID :** \`${g.id}\``
+                );
+              })
+              .join('\n\n━━━━━━━━━━━━━━\n\n');
+
+            const embed = new EmbedBuilder()
+              .setTitle('🎁 Giveaways en cours')
+              .setDescription(text)
+              .setColor(0x57f287)
+              .setTimestamp();
+
+            return interaction.reply({
+              embeds: [embed],
+              ephemeral: true
+            });
+          }
+        }
         if (interaction.customId !== 'ticket_create_menu') return;
 
         const existingTicket = getTicket(interaction.user.id);
@@ -312,77 +416,77 @@ module.exports = {
           });
         }
 
-if (interaction.isModalSubmit()) {
-  if (!interaction.customId.startsWith('ticket_close_modal_')) return;
+        if (interaction.isModalSubmit()) {
+          if (!interaction.customId.startsWith('ticket_close_modal_')) return;
 
-  // 🔥 IMPORTANT : évite l'erreur Discord
-  await interaction.deferReply({ ephemeral: true });
+          // 🔥 IMPORTANT : évite l'erreur Discord
+          await interaction.deferReply({ ephemeral: true });
 
-  try {
-    const channelId = interaction.customId.replace('ticket_close_modal_', '');
-    const channel = interaction.guild.channels.cache.get(channelId);
+          try {
+            const channelId = interaction.customId.replace('ticket_close_modal_', '');
+            const channel = interaction.guild.channels.cache.get(channelId);
 
-    if (!channel) {
-      return interaction.editReply({
-        content: '❌ Salon introuvable.'
-      });
-    }
+            if (!channel) {
+              return interaction.editReply({
+                content: '❌ Salon introuvable.'
+              });
+            }
 
-    const ticketData = findTicketByChannelId(channel.id);
+            const ticketData = findTicketByChannelId(channel.id);
 
-    if (!ticketData) {
-      return interaction.editReply({
-        content: '❌ Ce salon n’est pas un ticket.'
-      });
-    }
+            if (!ticketData) {
+              return interaction.editReply({
+                content: '❌ Ce salon n’est pas un ticket.'
+              });
+            }
 
-    const reason = interaction.fields.getTextInputValue('close_reason');
+            const reason = interaction.fields.getTextInputValue('close_reason');
 
-    const claimedMentions =
-      Array.isArray(ticketData.claimedBy) && ticketData.claimedBy.length > 0
-        ? ticketData.claimedBy.map(id => `<@${id}>`).join(', ')
-        : 'Personne';
+            const claimedMentions =
+              Array.isArray(ticketData.claimedBy) && ticketData.claimedBy.length > 0
+                ? ticketData.claimedBy.map(id => `<@${id}>`).join(', ')
+                : 'Personne';
 
-    // 🔥 Sécurité transcript
-    let transcript = null;
-    try {
-      transcript = await createTranscript(channel);
-    } catch (e) {
-      console.error('Erreur transcript :', e);
-    }
+            // 🔥 Sécurité transcript
+            let transcript = null;
+            try {
+              transcript = await createTranscript(channel);
+            } catch (e) {
+              console.error('Erreur transcript :', e);
+            }
 
-    deleteTicket(ticketData.userId);
+            deleteTicket(ticketData.userId);
 
-    await sendTicketLog(
-      interaction.guild,
-      ticketData.subjectId,
-      '🔒 Ticket fermé',
-      `**Utilisateur :** <@${ticketData.userId}>\n` +
-      `**Sujet :** ${ticketData.subject}\n` +
-      `**Pris en charge par :** ${claimedMentions}\n` +
-      `**Fermé par :** ${interaction.user}\n` +
-      `**Raison :** ${reason}\n` +
-      `**Salon :** #${channel.name}`,
-      0xed4245,
-      transcript ? [transcript] : []
-    );
+            await sendTicketLog(
+              interaction.guild,
+              ticketData.subjectId,
+              '🔒 Ticket fermé',
+              `**Utilisateur :** <@${ticketData.userId}>\n` +
+              `**Sujet :** ${ticketData.subject}\n` +
+              `**Pris en charge par :** ${claimedMentions}\n` +
+              `**Fermé par :** ${interaction.user}\n` +
+              `**Raison :** ${reason}\n` +
+              `**Salon :** #${channel.name}`,
+              0xed4245,
+              transcript ? [transcript] : []
+            );
 
-    await interaction.editReply({
-      content: '✅ Ticket fermé + transcript envoyé.'
-    });
+            await interaction.editReply({
+              content: '✅ Ticket fermé + transcript envoyé.'
+            });
 
-    setTimeout(async () => {
-      await channel.delete().catch(() => null);
-    }, 2000);
+            setTimeout(async () => {
+              await channel.delete().catch(() => null);
+            }, 2000);
 
-  } catch (error) {
-    console.error('❌ Erreur fermeture ticket :', error);
+          } catch (error) {
+            console.error('❌ Erreur fermeture ticket :', error);
 
-    await interaction.editReply({
-      content: '❌ Une erreur est survenue lors de la fermeture.'
-    });
-  }
-}
+            await interaction.editReply({
+              content: '❌ Une erreur est survenue lors de la fermeture.'
+            });
+          }
+        }
         if (interaction.customId?.startsWith('notif_role_')) {
           const roleId = interaction.customId.replace('notif_role_', '');
           const roleData = notifConfig.roles.find(r => r.id === roleId);
