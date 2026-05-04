@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const hasPermission = require('../utils/hasPermission');
+const { addStaffAction } = require('../utils/staffStatsStore');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -33,6 +34,8 @@ module.exports = {
         ephemeral: true
       });
     }
+
+    addStaffAction(interaction.guild.id, interaction.user.id, 'mutes');
 
     if (!member.moderatable) {
       return interaction.reply({

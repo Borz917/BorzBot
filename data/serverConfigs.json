@@ -1,0 +1,65 @@
+{
+  "1495600004880928788": {
+    "staffRoleId": "1495600004918939839",
+    "logs": {
+      "moderation": "1495600008605470917",
+      "voice": "1495600008605470919",
+      "messages": "1495600008605470920",
+      "boost": "1495600008605470921",
+      "roles": "1495600008911781928",
+      "raid": "1495600008911781929",
+      "support": "1495600008911781931"
+    },
+    "notifRoles": {
+      "illegal": "1495600004948037736",
+      "legal": "1495600004948037737",
+      "giveaways": "1498449286902321184",
+      "evenement": "1498449180178387198"
+    },
+    "ticketCategories": {
+      "boutique": "1496239997232091276",
+      "support": "1496240042488893540",
+      "recrutement": "1496240097983467581",
+      "illegal": "1496240140849516734",
+      "legal": "1496240163355885590",
+      "unban": "1496240223120654436",
+      "fonda": "1496240282809925682",
+      "plainte_staff": "1496240355568255026"
+    },
+    "security": {
+      "antiSpam": {
+        "enabled": true,
+        "maxMessages": 5,
+        "intervalMs": 10000,
+        "timeoutMs": 2100000,
+        "deleteMessages": true
+      },
+      "antiLink": {
+        "enabled": true,
+        "deleteMessage": true,
+        "timeoutMs": 1800000,
+        "allowedDomains": [
+          "discord.gg",
+          "discord.com",
+          "youtube.com",
+          "youtu.be",
+          "tiktok.com"
+        ]
+      },
+      "ignoredRoleIds": [
+        "1495600004918939839"
+      ]
+    },
+    "raid": {
+      "enabled": true,
+      "joinsLimit": 5,
+      "intervalMs": 60000,
+      "action": "alert",
+      "whitelistRoleIds": [
+        "1495600004880928790",
+        "1495600004880928789"
+      ],
+      "lockIgnoredChannelIds": []
+    }
+  }
+}

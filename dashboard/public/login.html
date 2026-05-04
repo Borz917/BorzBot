@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connexion • BorzBot Dashboard</title>
+  <link rel="stylesheet" href="login.css" />
+</head>
+<body>
+  <main class="login-card">
+    <div class="logo">B</div>
+
+    <h1>BorzBot Dashboard</h1>
+    <p>Connecte-toi avec Discord pour accéder au dashboard.</p>
+
+    <a class="login-btn" href="/auth/discord">
+      Se connecter avec Discord
+    </a>
+
+    <p id="error" class="error"></p>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('error')) {
+      document.getElementById('error').textContent =
+        'Accès refusé ou connexion annulée.';
+    }
+  </script>
+</body>
+</html>

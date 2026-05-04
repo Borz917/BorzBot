@@ -1,9 +1,18 @@
 const { EmbedBuilder } = require('discord.js');
+const { getServerConfig } = require('./serverConfig');
+
+const notifFallbackNames = {
+  illegal: 'Notification Illégal',
+  legal: 'Notification Légal',
+  giveaways: 'Notification Giveaways',
+  evenement: 'Notification Événement'
+};
 
 async function sendAnnouncement(interaction, options) {
   const {
     commandName,
     mentionType,
+    notifType,
     roleName,
     title,
     color,
@@ -29,12 +38,25 @@ async function sendAnnouncement(interaction, options) {
     allowedMentions = {
       parse: ['everyone']
     };
-  } else if (mentionType === 'role') {
-    const role = interaction.guild.roles.cache.find(r => r.name === roleName);
+  }
+
+  if (mentionType === 'role') {
+    const config = getServerConfig(interaction.guild.id);
+
+    let role = null;
+
+    if (notifType && config.notifRoles[notifType]) {
+      role = interaction.guild.roles.cache.get(config.notifRoles[notifType]);
+    }
+
+    if (!role) {
+      const fallbackName = roleName || notifFallbackNames[notifType];
+      role = interaction.guild.roles.cache.find(r => r.name === fallbackName);
+    }
 
     if (!role) {
       return interaction.reply({
-        content: `❌ Rôle introuvable : **${roleName}**`,
+        content: `❌ Rôle notification introuvable. Configure-le avec /confignotifrole.`,
         ephemeral: true
       });
     }

@@ -6,17 +6,14 @@ module.exports = {
     .setName('annoncelegal')
     .setDescription('Envoyer une annonce pour le rôle Notification Légal')
     .addStringOption(option =>
-      option
-        .setName('message')
-        .setDescription('Message de l’annonce')
-        .setRequired(true)
+      option.setName('message').setDescription('Message de l’annonce').setRequired(true)
     ),
 
   async execute(interaction) {
     await sendAnnouncement(interaction, {
       commandName: 'annoncelegal',
       mentionType: 'role',
-      roleName: 'Notification Légal',
+      notifType: 'legal',
       title: 'Annonce Légal',
       emoji: '⚖️',
       color: 0x57f287

@@ -6,17 +6,14 @@ module.exports = {
     .setName('annonceevenement')
     .setDescription('Envoyer une annonce pour le rôle Notification Événement')
     .addStringOption(option =>
-      option
-        .setName('message')
-        .setDescription('Message de l’annonce')
-        .setRequired(true)
+      option.setName('message').setDescription('Message de l’annonce').setRequired(true)
     ),
 
   async execute(interaction) {
     await sendAnnouncement(interaction, {
       commandName: 'annonceevenement',
       mentionType: 'role',
-      roleName: 'Notification Événement',
+      notifType: 'evenement',
       title: 'Annonce Événement',
       emoji: '🎉',
       color: 0x9b59b6

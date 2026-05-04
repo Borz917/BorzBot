@@ -1,19 +1,30 @@
 const { EmbedBuilder } = require('discord.js');
 const ticketConfig = require('../config/ticketConfig');
+const { getServerConfig } = require('./serverConfig');
 
 async function sendTicketLog(guild, subjectId, title, description, color = 0x5865f2, files = []) {
   try {
-    const channelName =
-      ticketConfig.ticketLogChannelsBySubject?.[subjectId] ||
-      ticketConfig.defaultLogsChannelName ||
-      'ticket-logs';
+    const serverConfig = getServerConfig(guild.id);
 
-    const channel = guild.channels.cache.find(
-      c => c.name === channelName && c.isTextBased()
-    );
+    let channel = null;
+
+    if (serverConfig.logs?.support) {
+      channel = guild.channels.cache.get(serverConfig.logs.support);
+    }
 
     if (!channel) {
-      console.log(`Salon de logs introuvable : ${channelName}`);
+      const channelName =
+        ticketConfig.ticketLogChannelsBySubject?.[subjectId] ||
+        ticketConfig.defaultLogsChannelName ||
+        'ticket-logs';
+
+      channel = guild.channels.cache.find(
+        c => c.name === channelName && c.isTextBased()
+      );
+    }
+
+    if (!channel) {
+      console.log(`Salon de logs ticket introuvable pour : ${subjectId}`);
       return;
     }
 

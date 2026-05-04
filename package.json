@@ -1,18 +1,30 @@
 {
   "name": "borzbot",
   "version": "1.0.0",
-  "description": "",
+  "description": "Bot Discord BorzBot avec modération, tickets, logs, mini-jeux, sécurité et dashboard.",
   "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node main.js",
+    "deploy": "node deploy-commands.js",
+    "clear-guild": "node clear-guild-commands.js",
+    "dashboard": "node dashboard/server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "keywords": [
+    "discord",
+    "bot",
+    "moderation",
+    "tickets",
+    "dashboard",
+    "borzbot"
+  ],
+  "author": "Borz",
+  "license": "MIT",
   "dependencies": {
-    "discord.js": "^14.26.3",
-    "dotenv": "^17.4.2",
-    "install": "^0.13.0"
+    "discord.js": "^14.22.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.18.2",
+    "express-session": "^1.18.1",
+    "passport": "^0.7.0",
+    "passport-discord": "^0.1.4"
   }
 }

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const hasPermission = require('../utils/hasPermission');
+const { addStaffAction } = require('../utils/staffStatsStore');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -30,6 +31,8 @@ module.exports = {
       });
     }
 
+    addStaffAction(interaction.guild.id, interaction.user.id, 'kicks');
+    
     if (!member.kickable) {
       return interaction.reply({
         content: '❌ Je ne peux pas expulser ce membre.',

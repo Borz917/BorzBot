@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BorzBot Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">B</div>
+      <div>
+        <h1>BorzBot</h1>
+        <p>Dashboard v1</p>
+      </div>
+    </div>
+
+    <nav>
+      <button class="nav-btn active" data-page="overview">Vue générale</button>
+      <button class="nav-btn" data-page="staff">Staff stats</button>
+      <button class="nav-btn" data-page="warns">Warns</button>
+      <button class="nav-btn" data-page="invites">Invitations</button>
+      <button class="nav-btn" data-page="giveaways">Giveaways</button>
+      <button class="nav-btn" data-page="config">Configuration</button>
+    </nav>
+  </aside>
+
+  <main class="main">
+<header class="topbar">
+  <div>
+    <h2 id="page-title">Vue générale</h2>
+    <p>Gestion rapide des données BorzBot</p>
+  </div>
+
+  <div class="top-actions">
+    <span id="userBadge" class="user-badge">Connecté</span>
+    <button id="refreshBtn">Actualiser</button>
+    <a href="/logout" class="logout-btn">Déconnexion</a>
+  </div>
+</header>
+
+    <section id="content"></section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

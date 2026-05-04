@@ -5,19 +5,17 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
-} = require('discord.js');
-
-const { getUserInvites, getGuildInvites } = require('../utils/inviteStore');
-const { getActiveGiveaways } = require('../utils/giveawayStore');
-
-const {
+  ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle
 } = require('discord.js');
 
+const { getServerConfig } = require('../utils/serverConfig');
+const { getUserInvites, getGuildInvites } = require('../utils/inviteStore');
+const { getActiveGiveaways } = require('../utils/giveawayStore');
 const createTranscript = require('../utils/createTranscript');
+const { addStaffAction } = require('../utils/staffStatsStore');
 
 const {
   getDuel,
@@ -44,13 +42,36 @@ function buildClaimButtonLabel(count) {
   return `Repris par ${count} staff`;
 }
 
+function getConfiguredStaffRole(guild) {
+  const serverConfig = getServerConfig(guild.id);
+
+  let staffRole = null;
+
+  if (serverConfig.staffRoleId) {
+    staffRole = guild.roles.cache.get(serverConfig.staffRoleId);
+  }
+
+  if (!staffRole) {
+    staffRole = guild.roles.cache.find(
+      r => r.name === ticketConfig.staffRoleName
+    );
+  }
+
+  return staffRole;
+}
+
 module.exports = {
   name: Events.InteractionCreate,
 
   async execute(interaction, client) {
     try {
+      // =========================
+      // SELECT MENUS
+      // =========================
       if (interaction.isStringSelectMenu()) {
-
+        // =========================
+        // PANEL INVITATIONS
+        // =========================
         if (interaction.customId === 'invite_panel_menu') {
           const selected = interaction.values[0];
 
@@ -72,9 +93,9 @@ module.exports = {
               .map(([userId, data], index) => {
                 const medal =
                   index === 0 ? '🥇' :
-                    index === 1 ? '🥈' :
-                      index === 2 ? '🥉' :
-                        `#${index + 1}`;
+                  index === 1 ? '🥈' :
+                  index === 2 ? '🥉' :
+                  `#${index + 1}`;
 
                 return `${medal} <@${userId}> — **${data.total} invitation(s)**`;
               })
@@ -150,45 +171,100 @@ module.exports = {
               ephemeral: true
             });
           }
+
+          return;
         }
+
+        // =========================
+        // MENU TICKET
+        // =========================
         if (interaction.customId !== 'ticket_create_menu') return;
 
         const existingTicket = getTicket(interaction.user.id);
+
         if (existingTicket?.channelId) {
-          return interaction.reply({
-            content: `❌ Tu as déjà un ticket ouvert : <#${existingTicket.channelId}>`,
-            ephemeral: true
-          });
+          const existingChannel = interaction.guild.channels.cache.get(existingTicket.channelId);
+
+          if (existingChannel) {
+            return interaction.reply({
+              content: `❌ Tu as déjà un ticket ouvert : ${existingChannel}`,
+              ephemeral: true
+            });
+          }
+
+          deleteTicket(interaction.user.id);
         }
 
         const subjectId = interaction.values[0];
-        const subject = ticketConfig.ticketSubjects.find(s => s.id === subjectId);
-        if (!subject) {
-          return interaction.reply({ content: '❌ Sujet invalide.', ephemeral: true });
-        }
 
-        const categoryName = ticketConfig.ticketCategoryBySubject[subject.id];
-        if (!categoryName) {
+        const subject = ticketConfig.ticketSubjects.find(
+          s => s.id === subjectId
+        );
+
+        if (!subject) {
           return interaction.reply({
-            content: `❌ Aucune catégorie configurée pour le sujet : ${subject.label}`,
+            content: '❌ Sujet invalide.',
             ephemeral: true
           });
         }
 
-        const category = interaction.guild.channels.cache.find(
-          c => c.name === categoryName && c.type === ChannelType.GuildCategory
-        );
+        const serverConfig = getServerConfig(interaction.guild.id);
+
+        const categoryKeyBySubject = {
+          questions_boutique: 'boutique',
+          support_general: 'support',
+          recrutement_equipe: 'recrutement',
+          pole_illegal: 'illegal',
+          pole_legal: 'legal',
+          demande_unban: 'unban',
+          contact_fonda: 'fonda',
+          plainte_staff: 'plainte_staff'
+        };
+
+        const categoryKey = categoryKeyBySubject[subject.id];
+
+        const configuredCategoryId = categoryKey
+          ? serverConfig.ticketCategories?.[categoryKey]
+          : null;
+
+        let category = null;
+        let categoryName = null;
+
+        if (configuredCategoryId) {
+          category = interaction.guild.channels.cache.get(configuredCategoryId);
+
+          if (category && category.type === ChannelType.GuildCategory) {
+            categoryName = category.name;
+          } else {
+            category = null;
+          }
+        }
+
+        if (!category) {
+          categoryName = ticketConfig.ticketCategoryBySubject[subject.id];
+
+          if (!categoryName) {
+            return interaction.reply({
+              content: `❌ Aucune catégorie configurée pour le sujet : ${subject.label}`,
+              ephemeral: true
+            });
+          }
+
+          category = interaction.guild.channels.cache.find(
+            c => c.name === categoryName && c.type === ChannelType.GuildCategory
+          );
+        }
 
         if (!category) {
           return interaction.reply({
-            content: `❌ Catégorie introuvable : ${categoryName}`,
+            content:
+              `❌ Catégorie ticket introuvable pour **${subject.label}**.\n` +
+              `Configure-la avec \`/configticketcategory\`.`,
             ephemeral: true
           });
         }
 
-        const staffRole = interaction.guild.roles.cache.find(
-          r => r.name === ticketConfig.staffRoleName
-        );
+        const staffRole = getConfiguredStaffRole(interaction.guild);
 
         const safeName = (interaction.user.username || interaction.user.id)
           .toLowerCase()
@@ -225,13 +301,13 @@ module.exports = {
             },
             ...(staffRole
               ? [{
-                id: staffRole.id,
-                allow: [
-                  PermissionsBitField.Flags.ViewChannel,
-                  PermissionsBitField.Flags.SendMessages,
-                  PermissionsBitField.Flags.ReadMessageHistory
-                ]
-              }]
+                  id: staffRole.id,
+                  allow: [
+                    PermissionsBitField.Flags.ViewChannel,
+                    PermissionsBitField.Flags.SendMessages,
+                    PermissionsBitField.Flags.ReadMessageHistory
+                  ]
+                }]
               : [])
           ]
         });
@@ -277,7 +353,10 @@ module.exports = {
           interaction.guild,
           subject.id,
           '🎫 Ticket ouvert',
-          `**Utilisateur :** ${interaction.user}\n**Sujet :** ${subject.label}\n**Catégorie :** ${categoryName}\n**Salon :** ${channel}`,
+          `**Utilisateur :** ${interaction.user}\n` +
+          `**Sujet :** ${subject.label}\n` +
+          `**Catégorie :** ${categoryName}\n` +
+          `**Salon :** ${channel}`,
           0x57f287
         );
 
@@ -287,14 +366,103 @@ module.exports = {
         });
       }
 
+      // =========================
+      // MODAL FERMETURE TICKET
+      // =========================
+      if (interaction.isModalSubmit()) {
+        if (!interaction.customId.startsWith('ticket_close_modal_')) return;
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+          const channelId = interaction.customId.replace('ticket_close_modal_', '');
+          const channel = interaction.guild.channels.cache.get(channelId);
+
+          if (!channel) {
+            return interaction.editReply({
+              content: '❌ Salon introuvable.'
+            });
+          }
+
+          const ticketData = findTicketByChannelId(channel.id);
+
+          if (!ticketData) {
+            return interaction.editReply({
+              content: '❌ Ce salon n’est pas un ticket.'
+            });
+          }
+
+          const reason = interaction.fields.getTextInputValue('close_reason');
+
+          const claimedMentions =
+            Array.isArray(ticketData.claimedBy) && ticketData.claimedBy.length > 0
+              ? ticketData.claimedBy.map(id => `<@${id}>`).join(', ')
+              : 'Personne';
+
+          let transcript = null;
+
+          try {
+            transcript = await createTranscript(channel);
+          } catch (e) {
+            console.error('Erreur transcript :', e);
+          }
+
+          addStaffAction(interaction.guild.id, interaction.user.id, 'ticketCloses');
+
+          deleteTicket(ticketData.userId);
+
+          await sendTicketLog(
+            interaction.guild,
+            ticketData.subjectId,
+            '🔒 Ticket fermé',
+            `**Utilisateur :** <@${ticketData.userId}>\n` +
+            `**Sujet :** ${ticketData.subject}\n` +
+            `**Pris en charge par :** ${claimedMentions}\n` +
+            `**Fermé par :** ${interaction.user}\n` +
+            `**Raison :** ${reason}\n` +
+            `**Salon :** #${channel.name}`,
+            0xed4245,
+            transcript ? [transcript] : []
+          );
+
+          await interaction.editReply({
+            content: '✅ Ticket fermé + transcript envoyé.'
+          });
+
+          setTimeout(async () => {
+            await channel.delete().catch(() => null);
+          }, 2000);
+
+          return;
+        } catch (error) {
+          console.error('❌ Erreur fermeture ticket :', error);
+
+          return interaction.editReply({
+            content: '❌ Une erreur est survenue lors de la fermeture.'
+          });
+        }
+      }
+
+      // =========================
+      // BOUTONS
+      // =========================
       if (interaction.isButton()) {
         if (interaction.customId?.startsWith('duel_decline_')) {
           const duelId = interaction.customId.replace('duel_decline_', '');
           const duel = getDuel(duelId);
 
-          if (!duel) return interaction.reply({ content: '❌ Duel introuvable.', ephemeral: true });
+          if (!duel) {
+            return interaction.reply({
+              content: '❌ Duel introuvable.',
+              ephemeral: true
+            });
+          }
+
           if (interaction.user.id !== duel.opponentId) {
-            return interaction.reply({ content: '❌ Ce duel n’est pas pour toi.', ephemeral: true });
+            return interaction.reply({
+              content: '❌ Ce duel n’est pas pour toi.',
+              ephemeral: true
+            });
           }
 
           deleteDuel(duelId);
@@ -310,9 +478,18 @@ module.exports = {
           const duelId = interaction.customId.replace('duel_accept_', '');
           const duel = getDuel(duelId);
 
-          if (!duel) return interaction.reply({ content: '❌ Duel introuvable.', ephemeral: true });
+          if (!duel) {
+            return interaction.reply({
+              content: '❌ Duel introuvable.',
+              ephemeral: true
+            });
+          }
+
           if (interaction.user.id !== duel.opponentId) {
-            return interaction.reply({ content: '❌ Ce duel n’est pas pour toi.', ephemeral: true });
+            return interaction.reply({
+              content: '❌ Ce duel n’est pas pour toi.',
+              ephemeral: true
+            });
           }
 
           duel.status = 'playing';
@@ -354,15 +531,27 @@ module.exports = {
           const duelId = parts.slice(2).join('_');
           const duel = getDuel(duelId);
 
-          if (!duel) return interaction.reply({ content: '❌ Duel introuvable.', ephemeral: true });
+          if (!duel) {
+            return interaction.reply({
+              content: '❌ Duel introuvable.',
+              ephemeral: true
+            });
+          }
+
           if (![duel.challengerId, duel.opponentId].includes(interaction.user.id)) {
-            return interaction.reply({ content: '❌ Tu ne participes pas à ce duel.', ephemeral: true });
+            return interaction.reply({
+              content: '❌ Tu ne participes pas à ce duel.',
+              ephemeral: true
+            });
           }
 
           if (!duel.choices) duel.choices = {};
 
           if (duel.choices[interaction.user.id]) {
-            return interaction.reply({ content: '❌ Tu as déjà choisi.', ephemeral: true });
+            return interaction.reply({
+              content: '❌ Tu as déjà choisi.',
+              ephemeral: true
+            });
           }
 
           duel.choices[interaction.user.id] = choice;
@@ -416,86 +605,20 @@ module.exports = {
           });
         }
 
-        if (interaction.isModalSubmit()) {
-          if (!interaction.customId.startsWith('ticket_close_modal_')) return;
-
-          // 🔥 IMPORTANT : évite l'erreur Discord
-          await interaction.deferReply({ ephemeral: true });
-
-          try {
-            const channelId = interaction.customId.replace('ticket_close_modal_', '');
-            const channel = interaction.guild.channels.cache.get(channelId);
-
-            if (!channel) {
-              return interaction.editReply({
-                content: '❌ Salon introuvable.'
-              });
-            }
-
-            const ticketData = findTicketByChannelId(channel.id);
-
-            if (!ticketData) {
-              return interaction.editReply({
-                content: '❌ Ce salon n’est pas un ticket.'
-              });
-            }
-
-            const reason = interaction.fields.getTextInputValue('close_reason');
-
-            const claimedMentions =
-              Array.isArray(ticketData.claimedBy) && ticketData.claimedBy.length > 0
-                ? ticketData.claimedBy.map(id => `<@${id}>`).join(', ')
-                : 'Personne';
-
-            // 🔥 Sécurité transcript
-            let transcript = null;
-            try {
-              transcript = await createTranscript(channel);
-            } catch (e) {
-              console.error('Erreur transcript :', e);
-            }
-
-            deleteTicket(ticketData.userId);
-
-            await sendTicketLog(
-              interaction.guild,
-              ticketData.subjectId,
-              '🔒 Ticket fermé',
-              `**Utilisateur :** <@${ticketData.userId}>\n` +
-              `**Sujet :** ${ticketData.subject}\n` +
-              `**Pris en charge par :** ${claimedMentions}\n` +
-              `**Fermé par :** ${interaction.user}\n` +
-              `**Raison :** ${reason}\n` +
-              `**Salon :** #${channel.name}`,
-              0xed4245,
-              transcript ? [transcript] : []
-            );
-
-            await interaction.editReply({
-              content: '✅ Ticket fermé + transcript envoyé.'
-            });
-
-            setTimeout(async () => {
-              await channel.delete().catch(() => null);
-            }, 2000);
-
-          } catch (error) {
-            console.error('❌ Erreur fermeture ticket :', error);
-
-            await interaction.editReply({
-              content: '❌ Une erreur est survenue lors de la fermeture.'
-            });
-          }
-        }
         if (interaction.customId?.startsWith('notif_role_')) {
           const roleId = interaction.customId.replace('notif_role_', '');
           const roleData = notifConfig.roles.find(r => r.id === roleId);
 
           if (!roleData) {
-            return interaction.reply({ content: '❌ Rôle notification introuvable.', ephemeral: true });
+            return interaction.reply({
+              content: '❌ Rôle notification introuvable.',
+              ephemeral: true
+            });
           }
 
-          const role = interaction.guild.roles.cache.find(r => r.name === roleData.roleName);
+          const role = interaction.guild.roles.cache.find(
+            r => r.name === roleData.roleName
+          );
 
           if (!role) {
             return interaction.reply({
@@ -513,26 +636,39 @@ module.exports = {
 
           if (interaction.member.roles.cache.has(role.id)) {
             await interaction.member.roles.remove(role);
-            return interaction.reply({ content: `❌ Rôle retiré : ${role}`, ephemeral: true });
+
+            return interaction.reply({
+              content: `❌ Rôle retiré : ${role}`,
+              ephemeral: true
+            });
           }
 
           await interaction.member.roles.add(role);
-          return interaction.reply({ content: `✅ Rôle ajouté : ${role}`, ephemeral: true });
+
+          return interaction.reply({
+            content: `✅ Rôle ajouté : ${role}`,
+            ephemeral: true
+          });
         }
 
         if (interaction.customId === 'ticket_claim_button') {
           const ticketData = findTicketByChannelId(interaction.channel.id);
 
           if (!ticketData) {
-            return interaction.reply({ content: '❌ Ce salon n’est pas un ticket.', ephemeral: true });
+            return interaction.reply({
+              content: '❌ Ce salon n’est pas un ticket.',
+              ephemeral: true
+            });
           }
 
-          const staffRole = interaction.guild.roles.cache.find(
-            r => r.name === ticketConfig.staffRoleName
-          );
+          const staffRole = getConfiguredStaffRole(interaction.guild);
 
-          const hasStaffRole = staffRole && interaction.member.roles.cache.has(staffRole.id);
-          const canManage = interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
+          const hasStaffRole =
+            staffRole && interaction.member.roles.cache.has(staffRole.id);
+
+          const canManage = interaction.member.permissions.has(
+            PermissionsBitField.Flags.ManageChannels
+          );
 
           if (!hasStaffRole && !canManage) {
             return interaction.reply({
@@ -545,8 +681,11 @@ module.exports = {
             ? [...ticketData.claimedBy]
             : [];
 
-          if (!claimedByList.includes(interaction.user.id)) {
+          const isFirstClaimByThisStaff = !claimedByList.includes(interaction.user.id);
+
+          if (isFirstClaimByThisStaff) {
             claimedByList.push(interaction.user.id);
+            addStaffAction(interaction.guild.id, interaction.user.id, 'ticketClaims');
           }
 
           setTicket(ticketData.userId, {
@@ -592,7 +731,10 @@ module.exports = {
             interaction.guild,
             ticketData.subjectId,
             '📌 Ticket mis en charge',
-            `**Utilisateur :** <@${ticketData.userId}>\n**Sujet :** ${ticketData.subject}\n**Staff :** ${claimedMentions}\n**Salon :** ${interaction.channel}`,
+            `**Utilisateur :** <@${ticketData.userId}>\n` +
+            `**Sujet :** ${ticketData.subject}\n` +
+            `**Staff :** ${claimedMentions}\n` +
+            `**Salon :** ${interaction.channel}`,
             0xfaa61a
           );
 
@@ -610,10 +752,7 @@ module.exports = {
           }
 
           const isOwner = interaction.user.id === ticketData.userId;
-
-          const staffRole = interaction.guild.roles.cache.find(
-            r => r.name === ticketConfig.staffRoleName
-          );
+          const staffRole = getConfiguredStaffRole(interaction.guild);
 
           const hasStaffRole =
             staffRole && interaction.member.roles.cache.has(staffRole.id);
@@ -648,6 +787,9 @@ module.exports = {
         }
       }
 
+      // =========================
+      // COMMANDES SLASH
+      // =========================
       if (!interaction.isChatInputCommand()) return;
 
       const command = client.commands.get(interaction.commandName);
