@@ -1,51 +1,65 @@
 const {
   SlashCommandBuilder,
-  PermissionsBitField,
   EmbedBuilder,
   ActionRowBuilder,
   StringSelectMenuBuilder
 } = require('discord.js');
+
+const hasPermission = require('../utils/hasPermission');
 const ticketConfig = require('../config/ticketConfig');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('sendticketpanel')
-    .setDescription('Envoie le panel de création de ticket'),
+    .setDescription('Envoyer le panel de création de ticket'),
 
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+    if (!hasPermission(interaction.member, 'sendticketpanel')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/sendticketpanel`.',
+        ephemeral: true
+      });
+    }
+
+    const subjects = ticketConfig.ticketSubjects || [];
+
+    if (!subjects.length) {
+      return interaction.reply({
+        content: '❌ Aucun sujet de ticket n’est configuré dans `ticketConfig.js`.',
         ephemeral: true
       });
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('🎫 Ouvrir un ticket')
+      .setTitle('🎫 Support • Tickets')
       .setDescription(
-        'Choisis le sujet de ton ticket dans le menu ci-dessous.\n\n' +
-        'Merci de ne pas ouvrir plusieurs tickets pour la même demande.'
+        `Bienvenue dans le support.\n\n` +
+        `Sélectionne une catégorie ci-dessous pour ouvrir un ticket.\n\n` +
+        `Merci d’expliquer clairement ta demande une fois le ticket créé.`
       )
-      .setColor(0x5865f2);
+      .setColor(0x5865f2)
+      .setTimestamp();
 
-    const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('ticket_create_menu')
-        .setPlaceholder('Choisis le sujet de ton ticket')
-        .addOptions(
-          ticketConfig.ticketSubjects.map(subject => ({
-            label: subject.label.slice(0, 100),
-            value: subject.id
-          }))
-        )
-    );
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId('ticket_create_menu')
+      .setPlaceholder('Choisis le sujet de ton ticket')
+      .addOptions(
+        subjects.map(subject => ({
+          label: subject.label,
+          value: subject.id,
+          description: subject.description || 'Ouvrir un ticket',
+          emoji: subject.emoji || '🎫'
+        }))
+      );
+
+    const row = new ActionRowBuilder().addComponents(menu);
 
     await interaction.channel.send({
       embeds: [embed],
       components: [row]
     });
 
-    await interaction.reply({
+    return interaction.reply({
       content: '✅ Panel ticket envoyé.',
       ephemeral: true
     });

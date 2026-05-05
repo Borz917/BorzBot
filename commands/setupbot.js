@@ -1,196 +1,121 @@
 const {
   SlashCommandBuilder,
+  EmbedBuilder,
   ChannelType,
-  PermissionsBitField,
-  EmbedBuilder
+  PermissionsBitField
 } = require('discord.js');
 
 const hasPermission = require('../utils/hasPermission');
+const sendDiscordLog = require('../utils/sendDiscordLog');
+const { setLogChannel } = require('../utils/serverConfig');
 
-const LOG_CATEGORY_NAME = 'Logs Discord';
-
-const LOG_CHANNELS = [
-  'moderation-logs',
-  'voice-logs',
-  'messages-logs',
-  'boost-logs',
-  'roles-logs',
-  'raid-logs',
-  'support-general-logs'
+const logChannels = [
+  { type: 'moderation', name: 'moderation-logs' },
+  { type: 'voice', name: 'voice-logs' },
+  { type: 'messages', name: 'messages-logs' },
+  { type: 'boost', name: 'boost-logs' },
+  { type: 'roles', name: 'roles-logs' },
+  { type: 'raid', name: 'raid-logs' },
+  { type: 'support', name: 'support-general-logs' }
 ];
-
-async function getOrCreateLogsCategory(guild, staffRole) {
-  let category = guild.channels.cache.find(
-    c => c.name === LOG_CATEGORY_NAME && c.type === ChannelType.GuildCategory
-  );
-
-  if (category) {
-    return { channel: category, created: false };
-  }
-
-  const permissionOverwrites = [
-    {
-      id: guild.roles.everyone.id,
-      deny: [PermissionsBitField.Flags.ViewChannel]
-    }
-  ];
-
-  if (staffRole) {
-    permissionOverwrites.push({
-      id: staffRole.id,
-      allow: [
-        PermissionsBitField.Flags.ViewChannel,
-        PermissionsBitField.Flags.ReadMessageHistory
-      ]
-    });
-  }
-
-  category = await guild.channels.create({
-    name: LOG_CATEGORY_NAME,
-    type: ChannelType.GuildCategory,
-    permissionOverwrites
-  });
-
-  return { channel: category, created: true };
-}
-
-async function getOrCreateLogChannel(guild, channelName, category, staffRole) {
-  let channel = guild.channels.cache.find(
-    c => c.name === channelName && c.type === ChannelType.GuildText
-  );
-
-  if (channel) {
-    return { channel, created: false };
-  }
-
-  const permissionOverwrites = [
-    {
-      id: guild.roles.everyone.id,
-      deny: [PermissionsBitField.Flags.ViewChannel]
-    },
-    {
-      id: guild.members.me.id,
-      allow: [
-        PermissionsBitField.Flags.ViewChannel,
-        PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.ReadMessageHistory,
-        PermissionsBitField.Flags.ManageChannels
-      ]
-    }
-  ];
-
-  if (staffRole) {
-    permissionOverwrites.push({
-      id: staffRole.id,
-      allow: [
-        PermissionsBitField.Flags.ViewChannel,
-        PermissionsBitField.Flags.ReadMessageHistory
-      ]
-    });
-  }
-
-  channel = await guild.channels.create({
-    name: channelName,
-    type: ChannelType.GuildText,
-    parent: category.id,
-    permissionOverwrites
-  });
-
-  return { channel, created: true };
-}
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setupbot')
-    .setDescription('Crée uniquement les salons de logs nécessaires au bot'),
+    .setDescription('Créer automatiquement les salons logs nécessaires au bot'),
 
   async execute(interaction) {
-    try {
-      if (!hasPermission(interaction.member, 'setupbot')) {
-        return interaction.reply({
-          content: '❌ Tu n’as pas la permission d’utiliser /setupbot.',
-          ephemeral: true
-        });
-      }
-
-      await interaction.deferReply({ ephemeral: true });
-
-      const guild = interaction.guild;
-      const botMember = guild.members.me;
-
-      if (!botMember.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-        return interaction.editReply({
-          content: '❌ Il me manque la permission **Gérer les salons**.'
-        });
-      }
-
-      const staffRole =
-        guild.roles.cache.find(r => r.name === 'Équipe STAFF') ||
-        guild.roles.cache.find(r => r.name === 'staff') ||
-        null;
-
-      const categoryResult = await getOrCreateLogsCategory(guild, staffRole);
-
-      const createdChannels = [];
-      const existingChannels = [];
-
-      for (const channelName of LOG_CHANNELS) {
-        const result = await getOrCreateLogChannel(
-          guild,
-          channelName,
-          categoryResult.channel,
-          staffRole
-        );
-
-        if (result.created) {
-          createdChannels.push(channelName);
-        } else {
-          existingChannels.push(channelName);
-        }
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle('✅ Setup logs terminé')
-        .setColor(0x57f287)
-        .setDescription(`Setup exécuté uniquement sur : **${guild.name}**`)
-        .addFields(
-          {
-            name: '📁 Catégorie',
-            value: categoryResult.created
-              ? `Créée : **${LOG_CATEGORY_NAME}**`
-              : `Déjà existante : **${LOG_CATEGORY_NAME}**`
-          },
-          {
-            name: '✅ Salons créés',
-            value: createdChannels.length > 0
-              ? createdChannels.map(c => `#${c}`).join('\n')
-              : 'Aucun'
-          },
-          {
-            name: 'ℹ️ Salons déjà existants',
-            value: existingChannels.length > 0
-              ? existingChannels.map(c => `#${c}`).join('\n')
-              : 'Aucun'
-          }
-        )
-        .setTimestamp();
-
-      await interaction.editReply({
-        embeds: [embed]
-      });
-    } catch (error) {
-      console.error('❌ Erreur setupbot :', error);
-
-      if (interaction.deferred || interaction.replied) {
-        return interaction.editReply({
-          content: '❌ Une erreur est survenue pendant le setup logs.'
-        }).catch(() => null);
-      }
-
+    if (!hasPermission(interaction.member, 'setupbot')) {
       return interaction.reply({
-        content: '❌ Une erreur est survenue pendant le setup logs.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/setupbot`.',
         ephemeral: true
-      }).catch(() => null);
+      });
     }
+
+    if (!interaction.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+      return interaction.reply({
+        content: '❌ Je n’ai pas la permission `Gérer les salons`.',
+        ephemeral: true
+      });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    let category = interaction.guild.channels.cache.find(
+      channel => channel.name === '📋・BorzBot Logs' && channel.type === ChannelType.GuildCategory
+    );
+
+    if (!category) {
+      category = await interaction.guild.channels.create({
+        name: '📋・BorzBot Logs',
+        type: ChannelType.GuildCategory,
+        reason: `Setup BorzBot par ${interaction.user.tag}`
+      });
+    }
+
+    const created = [];
+    const existing = [];
+
+    for (const log of logChannels) {
+      let channel = interaction.guild.channels.cache.find(
+        c => c.name === log.name && c.type === ChannelType.GuildText
+      );
+
+      if (!channel) {
+        channel = await interaction.guild.channels.create({
+          name: log.name,
+          type: ChannelType.GuildText,
+          parent: category.id,
+          permissionOverwrites: [
+            {
+              id: interaction.guild.roles.everyone.id,
+              deny: [PermissionsBitField.Flags.ViewChannel]
+            },
+            {
+              id: interaction.guild.members.me.id,
+              allow: [
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages,
+                PermissionsBitField.Flags.ReadMessageHistory,
+                PermissionsBitField.Flags.EmbedLinks,
+                PermissionsBitField.Flags.AttachFiles
+              ]
+            }
+          ],
+          reason: `Setup BorzBot par ${interaction.user.tag}`
+        });
+
+        created.push(channel);
+      } else {
+        existing.push(channel);
+      }
+
+      setLogChannel(interaction.guild.id, log.type, channel.id);
+    }
+
+    await sendDiscordLog(
+      interaction.guild,
+      'moderation-logs',
+      '⚙️ Setup BorzBot effectué',
+      `**Par :** ${interaction.user.tag}\n` +
+      `**Salons créés :** ${created.length}\n` +
+      `**Salons déjà existants :** ${existing.length}`,
+      0x57f287
+    );
+
+    const embed = new EmbedBuilder()
+      .setTitle('⚙️ Setup BorzBot terminé')
+      .setDescription(
+        `✅ Configuration des salons logs terminée.\n\n` +
+        `**Salons créés :** ${created.length}\n` +
+        `**Salons déjà existants :** ${existing.length}\n\n` +
+        created.map(c => `✅ ${c}`).join('\n')
+      )
+      .setColor(0x57f287)
+      .setTimestamp();
+
+    return interaction.editReply({
+      embeds: [embed]
+    });
   }
 };

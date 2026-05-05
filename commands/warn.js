@@ -1,87 +1,131 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const hasPermission = require('../utils/hasPermission');
-const { addWarn, getWarns } = require('../utils/warns');
 const sendDiscordLog = require('../utils/sendDiscordLog');
+const { addStaffAction } = require('../utils/staffStatsStore');
+
+const {
+  addWarn,
+  getWarns
+} = require('../utils/warns');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('warn')
-    .setDescription('Ajoute un avertissement')
+    .setDescription('Ajouter un avertissement à un membre')
     .addUserOption(option =>
-      option.setName('membre').setDescription('Le membre à avertir').setRequired(true)
+      option
+        .setName('membre')
+        .setDescription('Le membre à avertir')
+        .setRequired(true)
     )
     .addStringOption(option =>
-      option.setName('raison').setDescription('Raison du warn').setRequired(true)
+      option
+        .setName('raison')
+        .setDescription('La raison du warn')
+        .setRequired(true)
     ),
 
   async execute(interaction) {
     if (!hasPermission(interaction.member, 'warn')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission d’utiliser /warn.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/warn`.',
         ephemeral: true
       });
     }
 
     const user = interaction.options.getUser('membre');
-    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
     const reason = interaction.options.getString('raison');
+
+    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
     if (!member) {
       return interaction.reply({
-        content: '❌ Membre introuvable.',
+        content: '❌ Membre introuvable sur ce serveur.',
         ephemeral: true
       });
     }
 
-    addWarn(user.id, reason, interaction.user.id);
-    const total = getWarns(user.id).length;
+    if (member.id === interaction.user.id) {
+      return interaction.reply({
+        content: '❌ Tu ne peux pas te warn toi-même.',
+        ephemeral: true
+      });
+    }
+
+    if (member.id === interaction.client.user.id) {
+      return interaction.reply({
+        content: '❌ Je ne peux pas me warn moi-même.',
+        ephemeral: true
+      });
+    }
+
+    if (member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return interaction.reply({
+        content: '❌ Tu ne peux pas warn un administrateur.',
+        ephemeral: true
+      });
+    }
+
+    if (
+      interaction.member.roles.highest.position <= member.roles.highest.position &&
+      interaction.guild.ownerId !== interaction.user.id
+    ) {
+      return interaction.reply({
+        content: '❌ Tu ne peux pas warn une personne avec un rôle égal ou supérieur au tien.',
+        ephemeral: true
+      });
+    }
+
+    addWarn(interaction.guild.id, user.id, {
+      reason,
+      moderatorId: interaction.user.id,
+      moderatorTag: interaction.user.tag,
+      createdAt: new Date().toISOString()
+    });
+
+    addStaffAction(interaction.guild.id, interaction.user.id, 'warns');
+
+    const warns = getWarns(interaction.guild.id, user.id);
+    const totalWarns = Array.isArray(warns) ? warns.length : 0;
+
+    const dmEmbed = new EmbedBuilder()
+      .setTitle('⚠️ Avertissement')
+      .setDescription(
+        `Tu as reçu un avertissement sur le serveur **${interaction.guild.name}**.\n\n` +
+        `**Raison :** ${reason}\n` +
+        `**Modérateur :** ${interaction.user.tag}\n` +
+        `**Total warns :** ${totalWarns}`
+      )
+      .setColor(0xfaa61a)
+      .setTimestamp();
+
+    await member.send({ embeds: [dmEmbed] }).catch(() => null);
 
     await sendDiscordLog(
       interaction.guild,
       'moderation-logs',
-      '⚠️ Avertissement',
-      `**Utilisateur :** ${user.tag}\n**ID :** ${user.id}\n**Modérateur :** ${interaction.user.tag}\n**Total warns :** ${total}\n**Raison :** ${reason}`,
-      0xffcc66
+      '⚠️ Membre warn',
+      `**Utilisateur :** ${user.tag}\n` +
+      `**ID :** ${user.id}\n` +
+      `**Modérateur :** ${interaction.user.tag}\n` +
+      `**Total warns :** ${totalWarns}\n` +
+      `**Raison :** ${reason}`,
+      0xfaa61a
     );
 
-    let autoAction = '';
+    const embed = new EmbedBuilder()
+      .setTitle('⚠️ Warn ajouté')
+      .setDescription(
+        `**Membre :** ${user.tag}\n` +
+        `**Modérateur :** ${interaction.user.tag}\n` +
+        `**Total warns :** ${totalWarns}\n` +
+        `**Raison :** ${reason}`
+      )
+      .setColor(0xfaa61a)
+      .setTimestamp();
 
-    if (total === 3) {
-      if (member.moderatable) {
-        await member.timeout(30 * 60 * 1000, 'Auto-sanction : 3 warns').catch(() => null);
-        autoAction = '\n🔇 Auto-sanction : mute 30 minutes.';
-      }
-    }
-
-    if (total === 5) {
-      if (member.kickable) {
-        await member.kick('Auto-sanction : 5 warns').catch(() => null);
-        autoAction = '\n👢 Auto-sanction : kick.';
-      }
-    }
-
-    if (total >= 7) {
-      if (member.bannable) {
-        await member.ban({ reason: 'Auto-sanction : 7 warns' }).catch(() => null);
-        autoAction = '\n🔨 Auto-sanction : ban.';
-      }
-    }
-
-    if (autoAction) {
-      await sendDiscordLog(
-        interaction.guild,
-        'moderation-logs',
-        '🤖 Auto-sanction',
-        `**Utilisateur :** ${user.tag}\n**ID :** ${user.id}\n**Total warns :** ${total}${autoAction}`,
-        0xed4245
-      );
-    }
-
-    await interaction.reply(
-      `⚠️ ${user.tag} a reçu un avertissement.\n` +
-      `**Total :** ${total}\n` +
-      `**Raison :** ${reason}` +
-      autoAction
-    );
+    return interaction.reply({
+      embeds: [embed]
+    });
   }
 };

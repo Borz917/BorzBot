@@ -1,6 +1,11 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const hasPermission = require('../utils/hasPermission');
-const { setRaidConfig } = require('../utils/serverConfig');
+const sendDiscordLog = require('../utils/sendDiscordLog');
+
+const {
+  getServerConfig,
+  setRaidConfig
+} = require('../utils/serverConfig');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -8,86 +13,102 @@ module.exports = {
     .setDescription('Configurer l’anti-raid')
     .addBooleanOption(option =>
       option
-        .setName('active')
-        .setDescription('Activer ou désactiver')
-        .setRequired(true)
-    )
-    .addIntegerOption(option =>
-      option
-        .setName('joins')
-        .setDescription('Nombre de joins max')
+        .setName('enabled')
+        .setDescription('Activer ou désactiver l’anti-raid')
         .setRequired(false)
     )
     .addIntegerOption(option =>
       option
-        .setName('intervalle')
+        .setName('joins_limit')
+        .setDescription('Nombre maximum d’arrivées autorisées')
+        .setRequired(false)
+        .setMinValue(2)
+        .setMaxValue(100)
+    )
+    .addIntegerOption(option =>
+      option
+        .setName('interval_secondes')
         .setDescription('Intervalle en secondes')
         .setRequired(false)
+        .setMinValue(5)
+        .setMaxValue(600)
     )
     .addStringOption(option =>
       option
         .setName('action')
-        .setDescription('Action en cas de raid')
+        .setDescription('Action à effectuer en cas de raid')
         .setRequired(false)
         .addChoices(
-          { name: 'Alerte uniquement', value: 'alert' },
-          { name: 'Lockdown serveur', value: 'lockdown' },
-          { name: 'Kick nouveaux membres', value: 'kick' }
+          { name: 'Alerter seulement', value: 'alert' },
+          { name: 'Verrouiller le serveur', value: 'lock' },
+          { name: 'Kick les nouveaux arrivants', value: 'kick' }
         )
     ),
 
   async execute(interaction) {
     if (!hasPermission(interaction.member, 'raidconfig')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/raidconfig`.',
         ephemeral: true
       });
     }
 
-    const active = interaction.options.getBoolean('active');
-    const joins = interaction.options.getInteger('joins');
-    const intervalle = interaction.options.getInteger('intervalle');
+    const enabled = interaction.options.getBoolean('enabled');
+    const joinsLimit = interaction.options.getInteger('joins_limit');
+    const intervalSeconds = interaction.options.getInteger('interval_secondes');
     const action = interaction.options.getString('action');
 
-    const options = {
-      enabled: active
-    };
-
-    if (joins !== null) {
-      if (joins < 2 || joins > 50) {
-        return interaction.reply({
-          content: '❌ Le nombre de joins doit être entre 2 et 50.',
-          ephemeral: true
-        });
-      }
-
-      options.joinsLimit = joins;
+    if (
+      enabled === null &&
+      joinsLimit === null &&
+      intervalSeconds === null &&
+      action === null
+    ) {
+      return interaction.reply({
+        content:
+          '❌ Tu dois modifier au moins une option.\n' +
+          'Exemple : `/raidconfig enabled:true joins_limit:5 interval_secondes:60 action:lock`',
+        ephemeral: true
+      });
     }
 
-    if (intervalle !== null) {
-      if (intervalle < 5 || intervalle > 600) {
-        return interaction.reply({
-          content: '❌ L’intervalle doit être entre 5 et 600 secondes.',
-          ephemeral: true
-        });
-      }
+    const options = {};
 
-      options.intervalMs = intervalle * 1000;
-    }
-
-    if (action) {
-      options.action = action;
-    }
+    if (enabled !== null) options.enabled = enabled;
+    if (joinsLimit !== null) options.joinsLimit = joinsLimit;
+    if (intervalSeconds !== null) options.intervalMs = intervalSeconds * 1000;
+    if (action !== null) options.action = action;
 
     setRaidConfig(interaction.guild.id, options);
 
-    await interaction.reply({
-      content:
-        `✅ Anti-raid mis à jour.\n` +
-        `**Activé :** ${active ? 'Oui' : 'Non'}\n` +
-        `${joins !== null ? `**Joins :** ${joins}\n` : ''}` +
-        `${intervalle !== null ? `**Intervalle :** ${intervalle}s\n` : ''}` +
-        `${action ? `**Action :** ${action}` : ''}`,
+    const config = getServerConfig(interaction.guild.id);
+    const raid = config.raid;
+
+    await sendDiscordLog(
+      interaction.guild,
+      'raid-logs',
+      '🚨 Anti-raid configuré',
+      `**Modérateur :** ${interaction.user.tag}\n` +
+      `**Statut :** ${raid.enabled ? 'Activé' : 'Désactivé'}\n` +
+      `**Limite joins :** ${raid.joinsLimit}\n` +
+      `**Intervalle :** ${raid.intervalMs / 1000}s\n` +
+      `**Action :** ${raid.action}`,
+      0xed4245
+    );
+
+    const embed = new EmbedBuilder()
+      .setTitle('🚨 Anti-raid configuré')
+      .setDescription(
+        `**Statut :** ${raid.enabled ? '✅ Activé' : '❌ Désactivé'}\n` +
+        `**Limite joins :** ${raid.joinsLimit}\n` +
+        `**Intervalle :** ${raid.intervalMs / 1000}s\n` +
+        `**Action :** \`${raid.action}\``
+      )
+      .setColor(0xed4245)
+      .setTimestamp();
+
+    return interaction.reply({
+      embeds: [embed],
       ephemeral: true
     });
   }

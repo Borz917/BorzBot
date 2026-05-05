@@ -1,32 +1,57 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const hasPermission = require('../utils/hasPermission');
-const { lockServer } = require('../utils/raidActions');
+const { lockGuild } = require('../utils/raidLockHelper');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('raidlock')
-    .setDescription('Verrouille les salons publics du serveur'),
+    .setDescription('Verrouiller les salons textuels du serveur')
+    .addStringOption(option =>
+      option
+        .setName('raison')
+        .setDescription('Raison du verrouillage')
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
     if (!hasPermission(interaction.member, 'raidlock')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/raidlock`.',
         ephemeral: true
       });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!interaction.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+      return interaction.reply({
+        content: '❌ Je n’ai pas la permission `Gérer les salons`.',
+        ephemeral: true
+      });
+    }
 
-    const result = await lockServer(
+    const reason = interaction.options.getString('raison') || 'Raid lock manuel';
+
+    await interaction.deferReply({
+      ephemeral: true
+    });
+
+    const result = await lockGuild(
       interaction.guild,
-      `Lockdown lancé par ${interaction.user.tag}`
+      interaction.user.tag,
+      `${reason} | Par ${interaction.user.tag}`
     );
 
-    await interaction.editReply({
-      content:
-        `🔒 Serveur verrouillé.\n` +
-        `**Salons verrouillés :** ${result.locked.length}\n` +
-        `**Échecs :** ${result.failed.length}`
+    const embed = new EmbedBuilder()
+      .setTitle('🚨 Raidlock activé')
+      .setDescription(
+        `**Salons verrouillés :** ${result.lockedCount}\n` +
+        `**Échecs :** ${result.failedCount}\n` +
+        `**Raison :** ${reason}`
+      )
+      .setColor(0xed4245)
+      .setTimestamp();
+
+    return interaction.editReply({
+      embeds: [embed]
     });
   }
 };

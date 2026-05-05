@@ -2,8 +2,7 @@ const {
   SlashCommandBuilder,
   EmbedBuilder,
   ActionRowBuilder,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder
+  StringSelectMenuBuilder
 } = require('discord.js');
 
 const hasPermission = require('../utils/hasPermission');
@@ -11,12 +10,12 @@ const hasPermission = require('../utils/hasPermission');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('sendinvitepanel')
-    .setDescription('Envoie le panel InviteLogs'),
+    .setDescription('Envoyer le panel des invitations'),
 
   async execute(interaction) {
     if (!hasPermission(interaction.member, 'sendinvitepanel')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/sendinvitepanel`.',
         ephemeral: true
       });
     }
@@ -24,35 +23,36 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setTitle('📨 Panel Invitations')
       .setDescription(
-        'Utilise le menu ci-dessous pour consulter les invitations.\n\n' +
-        '🏆 **Top 15** → Voir les meilleurs inviteurs\n' +
-        '📨 **Mes invitations** → Voir ton nombre d’invitations\n' +
-        '🎁 **Giveaways** → Voir les giveaways actuellement disponibles'
+        `Utilise le menu ci-dessous pour consulter les invitations.\n\n` +
+        `🏆 **Top 15** — Voir les meilleurs inviteurs\n` +
+        `👤 **Mes invitations** — Voir ton nombre d’invitations\n` +
+        `🎁 **Giveaways** — Voir les giveaways disponibles`
       )
       .setColor(0x5865f2)
       .setTimestamp();
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId('invite_panel_menu')
-      .setPlaceholder('Choisis une option')
+      .setPlaceholder('Choisis une catégorie')
       .addOptions(
-        new StringSelectMenuOptionBuilder()
-          .setLabel('Top 15 invitations')
-          .setDescription('Voir les 15 meilleurs inviteurs')
-          .setValue('top15')
-          .setEmoji('🏆'),
-
-        new StringSelectMenuOptionBuilder()
-          .setLabel('Mes invitations')
-          .setDescription('Voir ton nombre d’invitations')
-          .setValue('myinvites')
-          .setEmoji('📨'),
-
-        new StringSelectMenuOptionBuilder()
-          .setLabel('Giveaways en cours')
-          .setDescription('Voir les giveaways disponibles')
-          .setValue('giveaways')
-          .setEmoji('🎁')
+        {
+          label: 'Top 15 invitations',
+          value: 'top15',
+          description: 'Voir les 15 personnes avec le plus d’invitations',
+          emoji: '🏆'
+        },
+        {
+          label: 'Mes invitations',
+          value: 'myinvites',
+          description: 'Voir ton nombre d’invitations',
+          emoji: '👤'
+        },
+        {
+          label: 'Giveaways',
+          value: 'giveaways',
+          description: 'Voir les giveaways en cours',
+          emoji: '🎁'
+        }
       );
 
     const row = new ActionRowBuilder().addComponents(menu);
@@ -62,8 +62,8 @@ module.exports = {
       components: [row]
     });
 
-    await interaction.reply({
-      content: '✅ Panel InviteLogs envoyé.',
+    return interaction.reply({
+      content: '✅ Panel invitations envoyé.',
       ephemeral: true
     });
   }
