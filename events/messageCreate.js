@@ -1,22 +1,192 @@
-const { getServerConfig } = require('../utils/serverConfig');
-const { addMessage, getRecentMessages, clearUser } = require('../utils/securityStore');
+const { PermissionsBitField } = require('discord.js');
 const sendDiscordLog = require('../utils/sendDiscordLog');
+const { getServerConfig } = require('../utils/serverConfig');
 
-function hasIgnoredRole(member, ignoredRoleIds) {
-  if (!member || !member.roles) return false;
+const spamCache = new Map();
+
+function normalizeDomain(domain) {
+  return String(domain || '')
+    .toLowerCase()
+    .trim()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .split('/')[0];
+}
+
+function extractLinks(content) {
+  const regex = /(https?:\/\/[^\s]+|www\.[^\s]+|discord\.gg\/[^\s]+|discord\.com\/invite\/[^\s]+)/gi;
+  return content.match(regex) || [];
+}
+
+function getDomainFromLink(link) {
+  let cleanLink = link.trim();
+
+  if (cleanLink.startsWith('www.')) {
+    cleanLink = `https://${cleanLink}`;
+  }
+
+  if (cleanLink.startsWith('discord.gg/')) {
+    return 'discord.gg';
+  }
+
+  try {
+    const url = new URL(cleanLink);
+    return normalizeDomain(url.hostname);
+  } catch {
+    return normalizeDomain(cleanLink);
+  }
+}
+
+function hasIgnoredRole(member, ignoredRoleIds = []) {
+  if (!member || !Array.isArray(ignoredRoleIds)) return false;
 
   return member.roles.cache.some(role => ignoredRoleIds.includes(role.id));
 }
 
-function containsLink(content) {
-  const regex = /(https?:\/\/|www\.|discord\.gg\/|discord\.com\/invite\/)/i;
-  return regex.test(content);
+function isAllowedDomain(domain, allowedDomains = []) {
+  const cleanDomain = normalizeDomain(domain);
+
+  return allowedDomains.some(allowed => {
+    const cleanAllowed = normalizeDomain(allowed);
+
+    return (
+      cleanDomain === cleanAllowed ||
+      cleanDomain.endsWith(`.${cleanAllowed}`)
+    );
+  });
 }
 
-function isAllowedDomain(content, allowedDomains) {
-  return allowedDomains.some(domain =>
-    content.toLowerCase().includes(domain.toLowerCase())
+async function timeoutMember(member, durationMs, reason) {
+  if (!member || !durationMs) return false;
+
+  if (!member.moderatable) {
+    return false;
+  }
+
+  await member.timeout(durationMs, reason).catch(() => null);
+  return true;
+}
+
+async function deleteMessage(message) {
+  if (!message.deletable) return false;
+
+  await message.delete().catch(() => null);
+  return true;
+}
+
+async function handleAntiLink(message, config) {
+  const antiLink = config.security?.antiLink;
+
+  if (!antiLink?.enabled) return false;
+
+  const links = extractLinks(message.content);
+
+  if (!links.length) return false;
+
+  const allowedDomains = antiLink.allowedDomains || [];
+
+  const forbiddenLinks = links.filter(link => {
+    const domain = getDomainFromLink(link);
+    return !isAllowedDomain(domain, allowedDomains);
+  });
+
+  if (!forbiddenLinks.length) return false;
+
+  if (antiLink.deleteMessage) {
+    await deleteMessage(message);
+  }
+
+  const timeoutMs = antiLink.timeoutMs || 5 * 60 * 1000;
+
+  const didTimeout = await timeoutMember(
+    message.member,
+    timeoutMs,
+    'Anti-link BorzBot'
   );
+
+  await sendDiscordLog(
+    message.guild,
+    'moderation-logs',
+    '🔗 Lien interdit détecté',
+    `**Membre :** ${message.author.tag} (${message.author.id})\n` +
+    `**Salon :** ${message.channel}\n` +
+    `**Lien(s) :** ${forbiddenLinks.map(link => `\`${link.slice(0, 100)}\``).join(', ')}\n` +
+    `**Message supprimé :** ${antiLink.deleteMessage ? 'Oui' : 'Non'}\n` +
+    `**Timeout :** ${didTimeout ? `${Math.floor(timeoutMs / 60000)} min` : 'Non'}`,
+    0xed4245
+  );
+
+  return true;
+}
+
+async function handleAntiSpam(message, config) {
+  const antiSpam = config.security?.antiSpam;
+
+  if (!antiSpam?.enabled) return false;
+
+  const guildId = message.guild.id;
+  const userId = message.author.id;
+  const key = `${guildId}:${userId}`;
+
+  const now = Date.now();
+  const intervalMs = antiSpam.intervalMs || 7000;
+  const maxMessages = antiSpam.maxMessages || 5;
+  const timeoutMs = antiSpam.timeoutMs || 10 * 60 * 1000;
+
+  const oldData = spamCache.get(key) || [];
+  const recentMessages = oldData.filter(item => now - item.createdAt <= intervalMs);
+
+  recentMessages.push({
+    messageId: message.id,
+    channelId: message.channel.id,
+    createdAt: now
+  });
+
+  spamCache.set(key, recentMessages);
+
+  if (recentMessages.length < maxMessages) {
+    return false;
+  }
+
+  let deletedCount = 0;
+
+  if (antiSpam.deleteMessages) {
+    for (const item of recentMessages) {
+      const channel = message.guild.channels.cache.get(item.channelId);
+
+      if (!channel || !channel.isTextBased()) continue;
+
+      const msg = await channel.messages.fetch(item.messageId).catch(() => null);
+
+      if (msg && msg.deletable) {
+        await msg.delete().then(() => {
+          deletedCount++;
+        }).catch(() => null);
+      }
+    }
+  }
+
+  const didTimeout = await timeoutMember(
+    message.member,
+    timeoutMs,
+    'Anti-spam BorzBot'
+  );
+
+  spamCache.delete(key);
+
+  await sendDiscordLog(
+    message.guild,
+    'moderation-logs',
+    '🚫 Spam détecté',
+    `**Membre :** ${message.author.tag} (${message.author.id})\n` +
+    `**Salon :** ${message.channel}\n` +
+    `**Messages détectés :** ${recentMessages.length}\n` +
+    `**Messages supprimés :** ${deletedCount}\n` +
+    `**Timeout :** ${didTimeout ? `${Math.floor(timeoutMs / 60000)} min` : 'Non'}`,
+    0xed4245
+  );
+
+  return true;
 }
 
 module.exports = {
@@ -25,98 +195,35 @@ module.exports = {
   async execute(message) {
     try {
       if (!message.guild) return;
+      if (!message.member) return;
       if (message.author.bot) return;
 
-      const member = message.member;
-      if (!member) return;
+      const config = getServerConfig(message.guild.id);
+      const ignoredRoleIds = config.security?.ignoredRoleIds || [];
 
-      const serverConfig = getServerConfig(message.guild.id);
-      const security = serverConfig.security;
+      if (hasIgnoredRole(message.member, ignoredRoleIds)) return;
 
-      if (hasIgnoredRole(member, security.ignoredRoleIds)) return;
+      if (message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+      if (message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return;
 
-      // =========================
-      // ANTI-LINK
-      // =========================
-      if (security.antiLink.enabled && containsLink(message.content)) {
-        if (!isAllowedDomain(message.content, security.antiLink.allowedDomains)) {
-          if (security.antiLink.deleteMessage) {
-            await message.delete().catch(() => null);
-          }
+      const botMember = message.guild.members.me;
 
-          if (member.moderatable && security.antiLink.timeoutMs > 0) {
-            await member.timeout(
-              security.antiLink.timeoutMs,
-              'Anti-link BorzBot'
-            ).catch(() => null);
-          }
-
-          await sendDiscordLog(
-            message.guild,
-            'moderation-logs',
-            '🔗 Anti-link détecté',
-            `**Utilisateur :** ${message.author.tag}\n` +
-            `**ID :** ${message.author.id}\n` +
-            `**Salon :** ${message.channel}\n` +
-            `**Message :** ${message.content}\n` +
-            `**Action :** Message supprimé + timeout`,
-            0xed4245
-          );
-
-          return;
-        }
-      }
-
-      // =========================
-      // ANTI-SPAM
-      // =========================
-      if (security.antiSpam.enabled) {
-        addMessage(message.author.id);
-
-        const recentMessages = getRecentMessages(
-          message.author.id,
-          security.antiSpam.intervalMs
+      if (!botMember.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+        await sendDiscordLog(
+          message.guild,
+          'moderation-logs',
+          '⚠️ Permission manquante',
+          `Anti-spam / anti-link actif, mais je n’ai pas la permission **Modérer les membres**.`,
+          0xfaa61a
         );
 
-        if (recentMessages.length >= security.antiSpam.maxMessages) {
-          clearUser(message.author.id);
-
-          if (security.antiSpam.deleteMessages) {
-            const fetched = await message.channel.messages.fetch({ limit: 20 }).catch(() => null);
-
-            if (fetched) {
-              const userMessages = fetched.filter(
-                msg => msg.author.id === message.author.id
-              );
-
-              await message.channel.bulkDelete(userMessages, true).catch(() => null);
-            }
-          }
-
-          if (member.moderatable && security.antiSpam.timeoutMs > 0) {
-            await member.timeout(
-              security.antiSpam.timeoutMs,
-              'Anti-spam BorzBot'
-            ).catch(() => null);
-          }
-
-          await sendDiscordLog(
-            message.guild,
-            'moderation-logs',
-            '🚨 Anti-spam détecté',
-            `**Utilisateur :** ${message.author.tag}\n` +
-            `**ID :** ${message.author.id}\n` +
-            `**Salon :** ${message.channel}\n` +
-            `**Messages :** ${recentMessages.length} messages en ${security.antiSpam.intervalMs / 1000}s\n` +
-            `**Action :** Suppression + timeout`,
-            0xed4245
-          );
-
-          return;
-        }
+        return;
       }
+
+      await handleAntiLink(message, config);
+      await handleAntiSpam(message, config);
     } catch (error) {
-      console.error('Erreur messageCreate sécurité :', error);
+      console.error('Erreur messageCreate :', error);
     }
   }
 };

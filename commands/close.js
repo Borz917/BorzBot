@@ -1,16 +1,44 @@
-const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
-const { findTicketByChannelId, deleteTicket } = require('../utils/ticketStore');
-const sendTicketLog = require('../utils/sendTicketLog');
+const {
+  SlashCommandBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder,
+  PermissionsBitField
+} = require('discord.js');
+
+const hasPermission = require('../utils/hasPermission');
+const { findTicketByChannelId } = require('../utils/ticketStore');
+const { getServerConfig } = require('../utils/serverConfig');
+const ticketConfig = require('../config/ticketConfig');
+
+function getConfiguredStaffRole(guild) {
+  const serverConfig = getServerConfig(guild.id);
+
+  let staffRole = null;
+
+  if (serverConfig.staffRoleId) {
+    staffRole = guild.roles.cache.get(serverConfig.staffRoleId);
+  }
+
+  if (!staffRole) {
+    staffRole = guild.roles.cache.find(
+      role => role.name === ticketConfig.staffRoleName
+    );
+  }
+
+  return staffRole;
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('close')
-    .setDescription('Ferme le ticket actuel'),
+    .setDescription('Fermer le ticket actuel'),
 
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+    if (!hasPermission(interaction.member, 'close')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/close`.',
         ephemeral: true
       });
     }
@@ -24,18 +52,38 @@ module.exports = {
       });
     }
 
-    deleteTicket(ticketData.userId);
+    const isOwner = interaction.user.id === ticketData.userId;
+    const staffRole = getConfiguredStaffRole(interaction.guild);
 
-    await sendTicketLog(
-      interaction.guild,
-      '🔒 Ticket fermé',
-      `**Utilisateur :** <@${ticketData.userId}>\n**Sujet :** ${ticketData.subject}\n**Fermé par :** ${interaction.user}`,
-      0xed4245
+    const hasStaffRole =
+      staffRole && interaction.member.roles.cache.has(staffRole.id);
+
+    const canManage = interaction.member.permissions.has(
+      PermissionsBitField.Flags.ManageChannels
     );
 
-    await interaction.reply('🔒 Fermeture du ticket...');
-    setTimeout(async () => {
-      await interaction.channel.delete().catch(() => null);
-    }, 1500);
+    if (!isOwner && !hasStaffRole && !canManage) {
+      return interaction.reply({
+        content: '❌ Tu ne peux pas fermer ce ticket.',
+        ephemeral: true
+      });
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId(`ticket_close_modal_${interaction.channel.id}`)
+      .setTitle('Fermer le ticket');
+
+    const reasonInput = new TextInputBuilder()
+      .setCustomId('close_reason')
+      .setLabel('Raison de la fermeture')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true)
+      .setMaxLength(500)
+      .setPlaceholder('Exemple : problème résolu, demande traitée...');
+
+    const row = new ActionRowBuilder().addComponents(reasonInput);
+    modal.addComponents(row);
+
+    return interaction.showModal(modal);
   }
 };

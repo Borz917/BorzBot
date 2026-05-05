@@ -13,55 +13,72 @@ function formatRole(id) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('configview')
-    .setDescription('Affiche la configuration du serveur'),
+    .setDescription('Voir la configuration actuelle du serveur'),
 
   async execute(interaction) {
     if (!hasPermission(interaction.member, 'configview')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/configview`.',
         ephemeral: true
       });
     }
 
     const config = getServerConfig(interaction.guild.id);
 
-    const logsText = Object.entries(config.logs)
-      .map(([type, id]) => `**${type} :** ${formatChannel(id)}`)
-      .join('\n');
+    const logsText =
+      `**Modération :** ${formatChannel(config.logs?.moderation)}\n` +
+      `**Vocal :** ${formatChannel(config.logs?.voice)}\n` +
+      `**Messages :** ${formatChannel(config.logs?.messages)}\n` +
+      `**Boost :** ${formatChannel(config.logs?.boost)}\n` +
+      `**Rôles :** ${formatChannel(config.logs?.roles)}\n` +
+      `**Raid :** ${formatChannel(config.logs?.raid)}\n` +
+      `**Support :** ${formatChannel(config.logs?.support)}`;
 
-    const notifText = Object.entries(config.notifRoles)
-      .map(([type, id]) => `**${type} :** ${formatRole(id)}`)
-      .join('\n');
+    const notifText =
+      `**Illégal :** ${formatRole(config.notifRoles?.illegal)}\n` +
+      `**Légal :** ${formatRole(config.notifRoles?.legal)}\n` +
+      `**Giveaways :** ${formatRole(config.notifRoles?.giveaways)}\n` +
+      `**Événement :** ${formatRole(config.notifRoles?.evenement)}`;
 
-    const ticketText = Object.entries(config.ticketCategories)
-      .map(([type, id]) => `**${type} :** ${formatChannel(id)}`)
-      .join('\n');
+    const ticketsText =
+      `**Boutique :** ${formatChannel(config.ticketCategories?.boutique)}\n` +
+      `**Support :** ${formatChannel(config.ticketCategories?.support)}\n` +
+      `**Recrutement :** ${formatChannel(config.ticketCategories?.recrutement)}\n` +
+      `**Illégal :** ${formatChannel(config.ticketCategories?.illegal)}\n` +
+      `**Légal :** ${formatChannel(config.ticketCategories?.legal)}\n` +
+      `**Unban :** ${formatChannel(config.ticketCategories?.unban)}\n` +
+      `**Fonda :** ${formatChannel(config.ticketCategories?.fonda)}\n` +
+      `**Plainte Staff :** ${formatChannel(config.ticketCategories?.plainte_staff)}`;
 
     const embed = new EmbedBuilder()
       .setTitle('⚙️ Configuration BorzBot')
-      .setDescription(`Configuration du serveur **${interaction.guild.name}**`)
       .setColor(0x5865f2)
       .addFields(
         {
           name: '👮 Rôle staff',
-          value: formatRole(config.staffRoleId)
+          value: formatRole(config.staffRoleId),
+          inline: false
         },
         {
-          name: '📊 Logs',
-          value: logsText || 'Aucun'
+          name: '📋 Salons logs',
+          value: logsText,
+          inline: false
         },
         {
           name: '🔔 Rôles notifications',
-          value: notifText || 'Aucun'
+          value: notifText,
+          inline: false
         },
         {
           name: '🎫 Catégories tickets',
-          value: ticketText || 'Aucun'
+          value: ticketsText,
+          inline: false
         }
       )
+      .setFooter({ text: `Demandé par ${interaction.user.tag}` })
       .setTimestamp();
 
-    await interaction.reply({
+    return interaction.reply({
       embeds: [embed],
       ephemeral: true
     });

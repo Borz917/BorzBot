@@ -1,0 +1,52 @@
+{
+  "1495600004880928788": [
+    {
+      "id": "1777927675967-i64131",
+      "type": "moderation",
+      "title": "⚙️ Setup BorzBot effectué",
+      "description": "**Par :** 1connu_tch\n**Salons créés :** 0\n**Salons déjà existants :** 7",
+      "color": 5763719,
+      "createdAt": "2026-05-04T20:47:55.967Z"
+    },
+    {
+      "id": "1777927675934-u35x1q",
+      "type": "raid",
+      "title": "📁 Salon créé",
+      "description": "**Nom :** 📋・BorzBot Logs\n**ID :** 1500962213001953413",
+      "color": 5763719,
+      "createdAt": "2026-05-04T20:47:55.934Z"
+    },
+    {
+      "id": "1777926563021-oyhtld",
+      "type": "roles",
+      "title": "🎭 Modification des rôles",
+      "description": "**Membre :** 1connu_tch\n**ID :** 415822952953806849\n\n**➕ Rôles ajoutés :**\n<@&1495600004918939838>\n\n",
+      "color": 5793266,
+      "createdAt": "2026-05-04T20:29:23.021Z"
+    },
+    {
+      "id": "1777926362814-jak3nm",
+      "type": "roles",
+      "title": "🎭 Modification des rôles",
+      "description": "**Membre :** 1connu_tch\n**ID :** 415822952953806849\n\n**➖ Rôles retirés :**\n<@&1495600004918939838>",
+      "color": 5793266,
+      "createdAt": "2026-05-04T20:26:02.814Z"
+    },
+    {
+      "id": "1777926250985-a62ike",
+      "type": "roles",
+      "title": "🎭 Modification des rôles",
+      "description": "**Membre :** 1connu_tch\n**ID :** 415822952953806849\n\n**➕ Rôles ajoutés :**\n<@&1495600004918939838>\n\n",
+      "color": 5793266,
+      "createdAt": "2026-05-04T20:24:10.985Z"
+    },
+    {
+      "id": "1777919873389-s7vg2m",
+      "type": "roles",
+      "title": "🗑️ Rôle supprimé",
+      "description": "**Nom :** test\n**ID :** 1500927174717345973",
+      "color": 15548997,
+      "createdAt": "2026-05-04T18:37:53.389Z"
+    }
+  ]
+}

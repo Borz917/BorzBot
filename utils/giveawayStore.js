@@ -2,15 +2,15 @@ const fs = require('fs');
 const path = require('path');
 
 const dataDir = path.join(__dirname, '..', 'data');
-const giveawaysPath = path.join(dataDir, 'giveaways.json');
+const filePath = path.join(dataDir, 'giveaways.json');
 
 function ensureFile() {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 
-  if (!fs.existsSync(giveawaysPath)) {
-    fs.writeFileSync(giveawaysPath, '{}', 'utf8');
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, '{}', 'utf8');
   }
 }
 
@@ -18,7 +18,7 @@ function loadGiveaways() {
   ensureFile();
 
   try {
-    return JSON.parse(fs.readFileSync(giveawaysPath, 'utf8') || '{}');
+    return JSON.parse(fs.readFileSync(filePath, 'utf8') || '{}');
   } catch {
     return {};
   }
@@ -26,41 +26,74 @@ function loadGiveaways() {
 
 function saveGiveaways(data) {
   ensureFile();
-  fs.writeFileSync(giveawaysPath, JSON.stringify(data, null, 2), 'utf8');
-}
-
-function createGiveaway(guildId, giveaway) {
-  const data = loadGiveaways();
-
-  if (!data[guildId]) {
-    data[guildId] = [];
-  }
-
-  data[guildId].push(giveaway);
-  saveGiveaways(data);
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
 
 function getActiveGiveaways(guildId) {
   const data = loadGiveaways();
-  return data[guildId] || [];
+
+  if (!Array.isArray(data[guildId])) {
+    data[guildId] = [];
+    saveGiveaways(data);
+  }
+
+  return data[guildId];
 }
 
-function endGiveaway(guildId, giveawayId) {
+function createGiveaway(guildId, giveawayData) {
   const data = loadGiveaways();
 
-  if (!data[guildId]) return false;
+  if (!Array.isArray(data[guildId])) {
+    data[guildId] = [];
+  }
+
+  const giveaway = {
+    id: `gw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    name: giveawayData.name,
+    reward: giveawayData.reward,
+    invitesRequired: giveawayData.invitesRequired,
+    description: giveawayData.description || 'Aucune description.',
+    createdBy: giveawayData.createdBy,
+    createdByTag: giveawayData.createdByTag,
+    createdAt: giveawayData.createdAt || new Date().toISOString()
+  };
+
+  data[guildId].push(giveaway);
+  saveGiveaways(data);
+
+  return giveaway;
+}
+
+function deleteGiveaway(guildId, giveawayId) {
+  const data = loadGiveaways();
+
+  if (!Array.isArray(data[guildId])) {
+    return false;
+  }
 
   const before = data[guildId].length;
 
-  data[guildId] = data[guildId].filter(g => g.id !== giveawayId);
+  data[guildId] = data[guildId].filter(giveaway => giveaway.id !== giveawayId);
 
   saveGiveaways(data);
 
   return data[guildId].length !== before;
 }
 
+function resetGiveaways(guildId) {
+  const data = loadGiveaways();
+
+  data[guildId] = [];
+  saveGiveaways(data);
+
+  return true;
+}
+
 module.exports = {
-  createGiveaway,
+  loadGiveaways,
+  saveGiveaways,
   getActiveGiveaways,
-  endGiveaway
+  createGiveaway,
+  deleteGiveaway,
+  resetGiveaways
 };

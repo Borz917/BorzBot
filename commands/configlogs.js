@@ -1,11 +1,12 @@
-const { SlashCommandBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ChannelType } = require('discord.js');
 const hasPermission = require('../utils/hasPermission');
+const sendDiscordLog = require('../utils/sendDiscordLog');
 const { setLogChannel } = require('../utils/serverConfig');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('configlogs')
-    .setDescription('Configure les salons de logs')
+    .setDescription('Configurer les salons logs')
     .addStringOption(option =>
       option
         .setName('type')
@@ -25,14 +26,14 @@ module.exports = {
       option
         .setName('salon')
         .setDescription('Salon de logs')
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(true)
-        .addChannelTypes(ChannelType.GuildText)
     ),
 
   async execute(interaction) {
     if (!hasPermission(interaction.member, 'configlogs')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/configlogs`.',
         ephemeral: true
       });
     }
@@ -42,8 +43,25 @@ module.exports = {
 
     setLogChannel(interaction.guild.id, type, channel.id);
 
-    await interaction.reply({
-      content: `✅ Logs **${type}** configurés sur ${channel}`,
+    await sendDiscordLog(
+      interaction.guild,
+      'moderation-logs',
+      '⚙️ Salon logs configuré',
+      `**Type :** \`${type}\`\n**Salon :** ${channel}\n**Par :** ${interaction.user.tag}`,
+      0x57f287
+    );
+
+    const embed = new EmbedBuilder()
+      .setTitle('⚙️ Salon logs configuré')
+      .setDescription(
+        `**Type :** \`${type}\`\n` +
+        `**Salon :** ${channel}`
+      )
+      .setColor(0x57f287)
+      .setTimestamp();
+
+    return interaction.reply({
+      embeds: [embed],
       ephemeral: true
     });
   }

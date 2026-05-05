@@ -2,15 +2,26 @@ const fs = require('fs');
 const path = require('path');
 
 const dataDir = path.join(__dirname, '..', 'data');
-const statsPath = path.join(dataDir, 'staffStats.json');
+const filePath = path.join(dataDir, 'staffStats.json');
+
+const defaultStats = {
+  warns: 0,
+  mutes: 0,
+  bans: 0,
+  kicks: 0,
+  ticketClaims: 0,
+  ticketCloses: 0,
+  total: 0,
+  lastActionAt: null
+};
 
 function ensureFile() {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 
-  if (!fs.existsSync(statsPath)) {
-    fs.writeFileSync(statsPath, '{}', 'utf8');
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, '{}', 'utf8');
   }
 }
 
@@ -18,7 +29,7 @@ function loadStats() {
   ensureFile();
 
   try {
-    return JSON.parse(fs.readFileSync(statsPath, 'utf8') || '{}');
+    return JSON.parse(fs.readFileSync(filePath, 'utf8') || '{}');
   } catch {
     return {};
   }
@@ -26,39 +37,45 @@ function loadStats() {
 
 function saveStats(data) {
   ensureFile();
-  fs.writeFileSync(statsPath, JSON.stringify(data, null, 2), 'utf8');
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
 
-function getDefaultStats() {
-  return {
-    warns: 0,
-    mutes: 0,
-    bans: 0,
-    kicks: 0,
-    ticketClaims: 0,
-    ticketCloses: 0,
-    total: 0
-  };
-}
+function ensureUserStats(data, guildId, userId) {
+  if (!data[guildId]) {
+    data[guildId] = {};
+  }
 
-function ensureGuildUser(data, guildId, userId) {
-  if (!data[guildId]) data[guildId] = {};
-  if (!data[guildId][userId]) data[guildId][userId] = getDefaultStats();
+  if (!data[guildId][userId]) {
+    data[guildId][userId] = { ...defaultStats };
+  }
 
   return data[guildId][userId];
 }
 
+function recalculateTotal(stats) {
+  stats.total =
+    (stats.warns || 0) +
+    (stats.mutes || 0) +
+    (stats.bans || 0) +
+    (stats.kicks || 0) +
+    (stats.ticketClaims || 0) +
+    (stats.ticketCloses || 0);
+
+  return stats.total;
+}
+
 function addStaffAction(guildId, userId, action) {
   const data = loadStats();
-  const stats = ensureGuildUser(data, guildId, userId);
+  const stats = ensureUserStats(data, guildId, userId);
 
   if (typeof stats[action] !== 'number') {
     stats[action] = 0;
   }
 
   stats[action] += 1;
-  stats.total += 1;
+  stats.lastActionAt = new Date().toISOString();
 
+  recalculateTotal(stats);
   saveStats(data);
 
   return stats;
@@ -66,31 +83,78 @@ function addStaffAction(guildId, userId, action) {
 
 function getStaffStats(guildId, userId) {
   const data = loadStats();
-  return data[guildId]?.[userId] || getDefaultStats();
+  const stats = ensureUserStats(data, guildId, userId);
+
+  recalculateTotal(stats);
+  saveStats(data);
+
+  return stats;
 }
 
 function getGuildStaffStats(guildId) {
   const data = loadStats();
-  return data[guildId] || {};
-}
 
-function resetStaffStats(guildId, userId = null) {
-  const data = loadStats();
+  if (!data[guildId]) {
+    return {};
+  }
 
-  if (!data[guildId]) return;
-
-  if (userId) {
-    delete data[guildId][userId];
-  } else {
-    delete data[guildId];
+  for (const userId of Object.keys(data[guildId])) {
+    recalculateTotal(data[guildId][userId]);
   }
 
   saveStats(data);
+
+  return data[guildId];
+}
+
+function getStaffTop(guildId, limit = 10) {
+  const guildStats = getGuildStaffStats(guildId);
+
+  return Object.entries(guildStats)
+    .map(([userId, stats]) => ({
+      userId,
+      ...stats,
+      total:
+        (stats.warns || 0) +
+        (stats.mutes || 0) +
+        (stats.bans || 0) +
+        (stats.kicks || 0) +
+        (stats.ticketClaims || 0) +
+        (stats.ticketCloses || 0)
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limit);
+}
+
+function resetStaffStats(guildId, userId) {
+  const data = loadStats();
+
+  if (data[guildId] && data[guildId][userId]) {
+    delete data[guildId][userId];
+    saveStats(data);
+    return true;
+  }
+
+  return false;
+}
+
+function resetGuildStaffStats(guildId) {
+  const data = loadStats();
+
+  if (data[guildId]) {
+    delete data[guildId];
+    saveStats(data);
+    return true;
+  }
+
+  return false;
 }
 
 module.exports = {
   addStaffAction,
   getStaffStats,
   getGuildStaffStats,
-  resetStaffStats
+  getStaffTop,
+  resetStaffStats,
+  resetGuildStaffStats
 };

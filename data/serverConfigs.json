@@ -2,13 +2,13 @@
   "1495600004880928788": {
     "staffRoleId": "1495600004918939839",
     "logs": {
-      "moderation": "1495600008605470917",
-      "voice": "1495600008605470919",
-      "messages": "1495600008605470920",
+      "moderation": "1495600008911781933",
+      "voice": "1495600008911781934",
+      "messages": "1495600008911781935",
       "boost": "1495600008605470921",
-      "roles": "1495600008911781928",
-      "raid": "1495600008911781929",
-      "support": "1495600008911781931"
+      "roles": "1495600008911781937",
+      "raid": "1495600009213640755",
+      "support": "1496242024981074000"
     },
     "notifRoles": {
       "illegal": "1495600004948037736",
@@ -30,14 +30,14 @@
       "antiSpam": {
         "enabled": true,
         "maxMessages": 5,
-        "intervalMs": 10000,
-        "timeoutMs": 2100000,
+        "intervalMs": 7000,
+        "timeoutMs": 600000,
         "deleteMessages": true
       },
       "antiLink": {
         "enabled": true,
         "deleteMessage": true,
-        "timeoutMs": 1800000,
+        "timeoutMs": 300000,
         "allowedDomains": [
           "discord.gg",
           "discord.com",

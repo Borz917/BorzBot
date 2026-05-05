@@ -1,52 +1,85 @@
 const { EmbedBuilder } = require('discord.js');
 const { getServerConfig } = require('./serverConfig');
 
-const fallbackChannels = {
-  moderation: 'moderation-logs',
-  voice: 'voice-logs',
-  messages: 'messages-logs',
-  boost: 'boost-logs',
-  roles: 'roles-logs',
-  raid: 'raid-logs',
-  support: 'support-general-logs'
+const logTypeToConfigKey = {
+  'moderation-logs': 'moderation',
+  'voice-logs': 'voice',
+  'messages-logs': 'messages',
+  'boost-logs': 'boost',
+  'roles-logs': 'roles',
+  'raid-logs': 'raid',
+  'support-logs': 'support',
+  'support-general-logs': 'support',
+
+  moderation: 'moderation',
+  voice: 'voice',
+  messages: 'messages',
+  boost: 'boost',
+  roles: 'roles',
+  raid: 'raid',
+  support: 'support'
 };
 
-function detectLogType(channelName) {
-  const entry = Object.entries(fallbackChannels).find(([, name]) => name === channelName);
-  return entry ? entry[0] : null;
+function normalizeColor(color) {
+  if (typeof color === 'number') return color;
+
+  if (typeof color === 'string') {
+    const clean = color.replace('#', '').trim();
+
+    if (/^[0-9A-Fa-f]{6}$/.test(clean)) {
+      return parseInt(clean, 16);
+    }
+  }
+
+  return 0x5865f2;
 }
 
-async function sendDiscordLog(guild, channelName, title, description, color = 0x5865f2) {
+async function sendDiscordLog(guild, logType, title, description, color = 0x5865f2, files = []) {
   try {
+    if (!guild) return false;
+
     const config = getServerConfig(guild.id);
-    const logType = detectLogType(channelName);
+    const configKey = logTypeToConfigKey[logType] || logType;
+    const channelId = config.logs?.[configKey];
 
-    let channel = null;
+    let logChannel = null;
 
-    if (logType && config.logs?.[logType]) {
-      channel = guild.channels.cache.get(config.logs[logType]);
+    if (channelId) {
+      logChannel = guild.channels.cache.get(channelId);
     }
 
-    if (!channel) {
-      channel = guild.channels.cache.find(
-        c => c.name === channelName && c.isTextBased()
+    if (!logChannel) {
+      const fallbackNames = [
+        logType,
+        `${configKey}-logs`,
+        'moderation-logs',
+        'logs'
+      ];
+
+      logChannel = guild.channels.cache.find(channel =>
+        fallbackNames.includes(channel.name)
       );
     }
 
-    if (!channel) {
-      console.log(`Salon de logs introuvable : ${channelName}`);
-      return;
+    if (!logChannel || !logChannel.isTextBased()) {
+      return false;
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setDescription(description || 'Aucune description.')
-      .setColor(color)
+      .setTitle(title || '📋 Log')
+      .setDescription(description ? String(description).slice(0, 4096) : 'Aucune description.')
+      .setColor(normalizeColor(color))
       .setTimestamp();
 
-    await channel.send({ embeds: [embed] });
+    await logChannel.send({
+      embeds: [embed],
+      files: Array.isArray(files) ? files : []
+    });
+
+    return true;
   } catch (error) {
-    console.error('Erreur sendDiscordLog :', error);
+    console.error('❌ Erreur sendDiscordLog :', error);
+    return false;
   }
 }
 

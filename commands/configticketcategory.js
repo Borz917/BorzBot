@@ -1,11 +1,12 @@
-const { SlashCommandBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ChannelType } = require('discord.js');
 const hasPermission = require('../utils/hasPermission');
+const sendDiscordLog = require('../utils/sendTicketLog');
 const { setTicketCategory } = require('../utils/serverConfig');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('configticketcategory')
-    .setDescription('Configure les catégories de tickets')
+    .setDescription('Configurer les catégories de tickets')
     .addStringOption(option =>
       option
         .setName('type')
@@ -13,27 +14,27 @@ module.exports = {
         .setRequired(true)
         .addChoices(
           { name: 'Boutique', value: 'boutique' },
-          { name: 'Support', value: 'support' },
+          { name: 'Support général', value: 'support' },
           { name: 'Recrutement', value: 'recrutement' },
-          { name: 'Illégal', value: 'illegal' },
-          { name: 'Légal', value: 'legal' },
-          { name: 'Unban', value: 'unban' },
-          { name: 'Fonda', value: 'fonda' },
-          { name: 'Plainte Staff', value: 'plainte_staff' }
+          { name: 'Pôle illégal', value: 'illegal' },
+          { name: 'Pôle légal', value: 'legal' },
+          { name: 'Demande unban', value: 'unban' },
+          { name: 'Contact fonda', value: 'fonda' },
+          { name: 'Plainte staff', value: 'plainte_staff' }
         )
     )
     .addChannelOption(option =>
       option
         .setName('categorie')
-        .setDescription('Catégorie Discord')
-        .setRequired(true)
+        .setDescription('Catégorie où créer les tickets')
         .addChannelTypes(ChannelType.GuildCategory)
+        .setRequired(true)
     ),
 
   async execute(interaction) {
     if (!hasPermission(interaction.member, 'configticketcategory')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/configticketcategory`.',
         ephemeral: true
       });
     }
@@ -43,8 +44,25 @@ module.exports = {
 
     setTicketCategory(interaction.guild.id, type, category.id);
 
-    await interaction.reply({
-      content: `✅ Catégorie ticket **${type}** configurée : **${category.name}**`,
+    await sendDiscordLog(
+      interaction.guild,
+      type,
+      '🎫 Catégorie ticket configurée',
+      `**Type :** \`${type}\`\n**Catégorie :** ${category.name}\n**Par :** ${interaction.user.tag}`,
+      0x57f287
+    );
+
+    const embed = new EmbedBuilder()
+      .setTitle('🎫 Catégorie ticket configurée')
+      .setDescription(
+        `**Type :** \`${type}\`\n` +
+        `**Catégorie :** ${category.name}`
+      )
+      .setColor(0x57f287)
+      .setTimestamp();
+
+    return interaction.reply({
+      embeds: [embed],
       ephemeral: true
     });
   }

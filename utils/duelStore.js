@@ -1,73 +1,159 @@
 const fs = require('fs');
 const path = require('path');
 
+const dataDir = path.join(__dirname, '..', 'data');
+const ranksPath = path.join(dataDir, 'duelRanks.json');
+
 const activeDuels = new Map();
 
-const dataDir = path.join(__dirname, '..', 'data');
-const rankingsPath = path.join(dataDir, 'rankings.json');
-
 function ensureFile() {
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  if (!fs.existsSync(rankingsPath)) fs.writeFileSync(rankingsPath, '{}', 'utf8');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  if (!fs.existsSync(ranksPath)) {
+    fs.writeFileSync(ranksPath, '{}', 'utf8');
+  }
 }
 
-function loadRankings() {
+function loadRanks() {
   ensureFile();
-  return JSON.parse(fs.readFileSync(rankingsPath, 'utf8') || '{}');
+
+  try {
+    return JSON.parse(fs.readFileSync(ranksPath, 'utf8') || '{}');
+  } catch {
+    return {};
+  }
 }
 
-function saveRankings(data) {
+function saveRanks(data) {
   ensureFile();
-  fs.writeFileSync(rankingsPath, JSON.stringify(data, null, 2), 'utf8');
+  fs.writeFileSync(ranksPath, JSON.stringify(data, null, 2), 'utf8');
 }
 
-function createDuel(id, data) {
-  activeDuels.set(id, data);
+function createDuel(data) {
+  const id = `duel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  activeDuels.set(id, {
+    id,
+    status: 'pending',
+    choices: {},
+    createdAt: Date.now(),
+    ...data
+  });
+
+  return activeDuels.get(id);
 }
 
 function getDuel(id) {
-  return activeDuels.get(id);
+  return activeDuels.get(id) || null;
 }
 
 function updateDuel(id, data) {
   activeDuels.set(id, data);
+  return data;
 }
 
 function deleteDuel(id) {
   activeDuels.delete(id);
 }
 
-function getPoints(userId) {
-  const rankings = loadRankings();
-  return rankings[userId] ?? 1000;
+function getUserRank(guildId, userId) {
+  const data = loadRanks();
+
+  if (!data[guildId]) data[guildId] = {};
+  if (!data[guildId][userId]) {
+    data[guildId][userId] = {
+      wins: 0,
+      losses: 0,
+      points: 1000
+    };
+  }
+
+  saveRanks(data);
+  return data[guildId][userId];
 }
 
-function setPoints(userId, points) {
-  const rankings = loadRankings();
-  rankings[userId] = points;
-  saveRankings(rankings);
+function addWin(winnerId, loserId, guildId = null) {
+  const data = loadRanks();
+
+  if (guildId) {
+    if (!data[guildId]) data[guildId] = {};
+
+    if (!data[guildId][winnerId]) {
+      data[guildId][winnerId] = { wins: 0, losses: 0, points: 1000 };
+    }
+
+    if (!data[guildId][loserId]) {
+      data[guildId][loserId] = { wins: 0, losses: 0, points: 1000 };
+    }
+
+    data[guildId][winnerId].wins += 1;
+    data[guildId][winnerId].points += 25;
+
+    data[guildId][loserId].losses += 1;
+    data[guildId][loserId].points = Math.max(0, data[guildId][loserId].points - 15);
+
+    saveRanks(data);
+    return;
+  }
+
+  // Compatibilité avec ton ancien interactionCreate.js qui appelle addWin(winnerId, loserId)
+  if (!data.global) data.global = {};
+
+  if (!data.global[winnerId]) {
+    data.global[winnerId] = { wins: 0, losses: 0, points: 1000 };
+  }
+
+  if (!data.global[loserId]) {
+    data.global[loserId] = { wins: 0, losses: 0, points: 1000 };
+  }
+
+  data.global[winnerId].wins += 1;
+  data.global[winnerId].points += 25;
+
+  data.global[loserId].losses += 1;
+  data.global[loserId].points = Math.max(0, data.global[loserId].points - 15);
+
+  saveRanks(data);
 }
 
-function addWin(winnerId, loserId) {
-  setPoints(winnerId, getPoints(winnerId) + 25);
-  setPoints(loserId, Math.max(0, getPoints(loserId) - 15));
+function getLeaderboard(guildId) {
+  const data = loadRanks();
+  const guildRanks = data[guildId] || data.global || {};
+
+  return Object.entries(guildRanks)
+    .map(([userId, stats]) => ({
+      userId,
+      wins: stats.wins || 0,
+      losses: stats.losses || 0,
+      points: stats.points ?? 1000
+    }))
+    .sort((a, b) => b.points - a.points);
 }
 
-function resetRank(userId) {
-  setPoints(userId, 1000);
+function resetUserRank(guildId, userId) {
+  const data = loadRanks();
+
+  if (data[guildId]?.[userId]) {
+    delete data[guildId][userId];
+  }
+
+  if (data.global?.[userId]) {
+    delete data.global[userId];
+  }
+
+  saveRanks(data);
 }
 
-function getRanking(userId) {
-  return getPoints(userId);
-}
+function resetGuildRanks(guildId) {
+  const data = loadRanks();
 
-function getAllRankings() {
-  const rankings = loadRankings();
+  if (data[guildId]) {
+    delete data[guildId];
+  }
 
-  return Object.entries(rankings).map(([userId, points]) => ({
-    userId,
-    points
-  }));
+  saveRanks(data);
 }
 
 module.exports = {
@@ -76,7 +162,8 @@ module.exports = {
   updateDuel,
   deleteDuel,
   addWin,
-  resetRank,
-  getRanking,
-  getAllRankings
+  getUserRank,
+  getLeaderboard,
+  resetUserRank,
+  resetGuildRanks
 };

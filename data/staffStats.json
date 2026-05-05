@@ -1,1 +1,14 @@
-{}
+{
+  "1495600004880928788": {
+    "415822952953806849": {
+      "warns": 3,
+      "mutes": 0,
+      "bans": 0,
+      "kicks": 0,
+      "ticketClaims": 1,
+      "ticketCloses": 2,
+      "total": 6,
+      "lastActionAt": "2026-05-05T10:14:41.372Z"
+    }
+  }
+}

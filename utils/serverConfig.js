@@ -370,5 +370,5 @@ module.exports = {
   addRaidIgnoredChannel,
   removeRaidIgnoredChannel,
 
-  resetServerConfig
+  resetServerConfig,
 };

@@ -1,17 +1,27 @@
+const { Events } = require('discord.js');
 const sendDiscordLog = require('../utils/sendDiscordLog');
+const { limitText, formatUser } = require('../utils/logFormat');
 
 module.exports = {
-  name: 'messageDelete',
+  name: Events.MessageDelete,
 
   async execute(message) {
     try {
-      if (!message.guild || message.author?.bot) return;
+      if (!message.guild) return;
+      if (message.author?.bot) return;
+
+      const author = message.author
+        ? formatUser(message.author)
+        : 'Auteur inconnu';
 
       await sendDiscordLog(
         message.guild,
         'messages-logs',
         '🗑️ Message supprimé',
-        `**Auteur :** ${message.author.tag}\n**Salon :** ${message.channel}\n\n**Contenu :**\n${message.content || '*Aucun contenu*'}`,
+        `**Auteur :** ${author}\n` +
+        `**Salon :** ${message.channel}\n` +
+        `**Message ID :** \`${message.id}\`\n\n` +
+        `**Contenu :**\n${limitText(message.content || 'Contenu indisponible.', 1500)}`,
         0xed4245
       );
     } catch (error) {

@@ -1,11 +1,12 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const hasPermission = require('../utils/hasPermission');
+const sendDiscordLog = require('../utils/sendDiscordLog');
 const { setNotifRole } = require('../utils/serverConfig');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('confignotifrole')
-    .setDescription('Configure les rôles notifications')
+    .setDescription('Configurer les rôles notifications pour les annonces')
     .addStringOption(option =>
       option
         .setName('type')
@@ -21,14 +22,14 @@ module.exports = {
     .addRoleOption(option =>
       option
         .setName('role')
-        .setDescription('Rôle notification')
+        .setDescription('Rôle à mentionner')
         .setRequired(true)
     ),
 
   async execute(interaction) {
     if (!hasPermission(interaction.member, 'confignotifrole')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/confignotifrole`.',
         ephemeral: true
       });
     }
@@ -38,8 +39,25 @@ module.exports = {
 
     setNotifRole(interaction.guild.id, type, role.id);
 
-    await interaction.reply({
-      content: `✅ Rôle notification **${type}** configuré : ${role}`,
+    await sendDiscordLog(
+      interaction.guild,
+      'moderation-logs',
+      '🔔 Rôle notification configuré',
+      `**Type :** \`${type}\`\n**Rôle :** ${role}\n**Par :** ${interaction.user.tag}`,
+      0x57f287
+    );
+
+    const embed = new EmbedBuilder()
+      .setTitle('🔔 Rôle notification configuré')
+      .setDescription(
+        `**Type :** \`${type}\`\n` +
+        `**Rôle :** ${role}`
+      )
+      .setColor(0x57f287)
+      .setTimestamp();
+
+    return interaction.reply({
+      embeds: [embed],
       ephemeral: true
     });
   }

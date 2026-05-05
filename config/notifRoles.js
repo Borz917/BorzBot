@@ -1,30 +1,32 @@
 module.exports = {
-  channelName: '📜・rôles',
-
   roles: [
     {
       id: 'illegal',
-      label: 'Notification Illégal',
+      label: 'Illégal',
       roleName: 'Notification Illégal',
-      emoji: '🛡️'
-    },
-    {
-      id: 'event',
-      label: 'Notification Événement',
-      roleName: 'Notification Événement',
-      emoji: '🎉'
-    },
-    {
-      id: 'giveaway',
-      label: 'Notification Giveaways',
-      roleName: 'Notification Giveaways',
-      emoji: '🎁'
+      emoji: '🔫',
+      description: 'Recevoir les annonces liées au pôle illégal.'
     },
     {
       id: 'legal',
-      label: 'Notification Légal',
+      label: 'Légal',
       roleName: 'Notification Légal',
-      emoji: '⚖️'
+      emoji: '⚖️',
+      description: 'Recevoir les annonces liées au pôle légal.'
+    },
+    {
+      id: 'giveaways',
+      label: 'Giveaways',
+      roleName: 'Notification Giveaways',
+      emoji: '🎁',
+      description: 'Recevoir les annonces giveaways.'
+    },
+    {
+      id: 'evenement',
+      label: 'Événement',
+      roleName: 'Notification Evénement',
+      emoji: '🎉',
+      description: 'Recevoir les annonces événements.'
     }
   ]
 };

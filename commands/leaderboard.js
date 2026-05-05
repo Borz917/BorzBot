@@ -1,41 +1,58 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const hasPermission = require('../utils/hasPermission');
-const { getAllRankings } = require('../utils/duelStore');
+const { getLeaderboard } = require('../utils/duelStore');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('leaderboard')
-    .setDescription('Affiche le leaderboard ranked'),
+    .setDescription('Voir le classement ranked duel'),
 
   async execute(interaction) {
     if (!hasPermission(interaction.member, 'leaderboard')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/leaderboard`.',
         ephemeral: true
       });
     }
 
-    const rankings = getAllRankings()
-      .sort((a, b) => b.points - a.points)
-      .slice(0, 10);
+    const leaderboard = getLeaderboard(interaction.guild.id).slice(0, 10);
 
-    if (rankings.length === 0) {
-      return interaction.reply('🏆 Aucun joueur classé pour le moment.');
+    if (!leaderboard.length) {
+      return interaction.reply({
+        content: '🏆 Aucun joueur classé pour le moment.',
+        ephemeral: true
+      });
     }
 
-    const text = rankings
-      .map((entry, index) => {
-        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`;
-        return `${medal} <@${entry.userId}> — **${entry.points} pts**`;
+    const text = leaderboard
+      .map((player, index) => {
+        const medal =
+          index === 0 ? '🥇' :
+          index === 1 ? '🥈' :
+          index === 2 ? '🥉' :
+          `#${index + 1}`;
+
+        const totalGames = player.wins + player.losses;
+        const winrate = totalGames > 0
+          ? Math.round((player.wins / totalGames) * 100)
+          : 0;
+
+        return (
+          `${medal} <@${player.userId}> — **${player.points} pts**\n` +
+          `V: ${player.wins} | D: ${player.losses} | WR: ${winrate}%`
+        );
       })
-      .join('\n');
+      .join('\n\n');
 
     const embed = new EmbedBuilder()
-      .setTitle('🏆 Leaderboard Ranked 1vs1')
+      .setTitle('🏆 Leaderboard Duel Ranked')
       .setDescription(text)
       .setColor(0xfaa61a)
+      .setFooter({ text: `Demandé par ${interaction.user.tag}` })
       .setTimestamp();
 
-    await interaction.reply({ embeds: [embed] });
+    return interaction.reply({
+      embeds: [embed]
+    });
   }
 };

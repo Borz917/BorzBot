@@ -12,24 +12,18 @@ const { createDuel } = require('../utils/duelStore');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('duel')
-    .setDescription('Défie un joueur en 1vs1')
+    .setDescription('Défier un membre en pierre-feuille-ciseaux')
     .addUserOption(option =>
-      option.setName('adversaire')
-        .setDescription('Joueur à défier')
+      option
+        .setName('membre')
+        .setDescription('Le membre à défier')
         .setRequired(true)
     )
     .addStringOption(option =>
-      option.setName('jeu')
-        .setDescription('Jeu du duel')
-        .setRequired(true)
-        .addChoices(
-          { name: 'Pierre Feuille Ciseaux', value: 'rps' }
-        )
-    )
-    .addStringOption(option =>
-      option.setName('mode')
+      option
+        .setName('mode')
         .setDescription('Mode du duel')
-        .setRequired(true)
+        .setRequired(false)
         .addChoices(
           { name: 'Fun', value: 'fun' },
           { name: 'Ranked', value: 'ranked' }
@@ -39,21 +33,13 @@ module.exports = {
   async execute(interaction) {
     if (!hasPermission(interaction.member, 'duel')) {
       return interaction.reply({
-        content: '❌ Tu n’as pas la permission.',
+        content: '❌ Tu n’as pas la permission d’utiliser `/duel`.',
         ephemeral: true
       });
     }
 
-    const opponent = interaction.options.getUser('adversaire');
-    const game = interaction.options.getString('jeu');
-    const mode = interaction.options.getString('mode');
-
-    if (opponent.bot) {
-      return interaction.reply({
-        content: '❌ Tu ne peux pas défier un bot.',
-        ephemeral: true
-      });
-    }
+    const opponent = interaction.options.getUser('membre');
+    const mode = interaction.options.getString('mode') || 'fun';
 
     if (opponent.id === interaction.user.id) {
       return interaction.reply({
@@ -62,40 +48,44 @@ module.exports = {
       });
     }
 
-    const duelId = `${interaction.user.id}_${opponent.id}_${Date.now()}`;
+    if (opponent.bot) {
+      return interaction.reply({
+        content: '❌ Tu ne peux pas défier un bot.',
+        ephemeral: true
+      });
+    }
 
-    createDuel(duelId, {
-      id: duelId,
+    const duel = createDuel({
+      guildId: interaction.guild.id,
       challengerId: interaction.user.id,
+      challengerTag: interaction.user.tag,
       opponentId: opponent.id,
-      game,
-      mode,
-      status: 'pending',
-      choices: {}
+      opponentTag: opponent.tag,
+      mode
     });
 
     const embed = new EmbedBuilder()
-      .setTitle('⚔️ Duel 1vs1')
+      .setTitle('⚔️ Duel proposé')
       .setDescription(
         `${opponent}, tu as été défié par ${interaction.user}.\n\n` +
-        `**Jeu :** Pierre Feuille Ciseaux\n` +
-        `**Mode :** ${mode === 'ranked' ? 'Ranked 🏆' : 'Fun 🎮'}`
+        `**Mode :** ${mode === 'ranked' ? 'Ranked 🏆' : 'Fun 🎮'}\n\n` +
+        `Tu peux accepter ou refuser le duel.`
       )
       .setColor(mode === 'ranked' ? 0xfaa61a : 0x5865f2)
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`duel_accept_${duelId}`)
+        .setCustomId(`duel_accept_${duel.id}`)
         .setLabel('Accepter')
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId(`duel_decline_${duelId}`)
+        .setCustomId(`duel_decline_${duel.id}`)
         .setLabel('Refuser')
         .setStyle(ButtonStyle.Danger)
     );
 
-    await interaction.reply({
+    return interaction.reply({
       content: `${opponent}`,
       embeds: [embed],
       components: [row]

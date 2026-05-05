@@ -1,7 +1,21 @@
+const { Events, ChannelType } = require('discord.js');
 const sendDiscordLog = require('../utils/sendDiscordLog');
 
+function getChannelTypeName(type) {
+  const types = {
+    [ChannelType.GuildText]: 'Salon textuel',
+    [ChannelType.GuildVoice]: 'Salon vocal',
+    [ChannelType.GuildCategory]: 'Catégorie',
+    [ChannelType.GuildAnnouncement]: 'Salon annonce',
+    [ChannelType.GuildStageVoice]: 'Stage',
+    [ChannelType.GuildForum]: 'Forum'
+  };
+
+  return types[type] || `Type ${type}`;
+}
+
 module.exports = {
-  name: 'channelDelete',
+  name: Events.ChannelDelete,
 
   async execute(channel) {
     try {
@@ -9,9 +23,12 @@ module.exports = {
 
       await sendDiscordLog(
         channel.guild,
-        'raid-logs',
-        '🗑️ Salon supprimé',
-        `**Nom :** ${channel.name}\n**ID :** ${channel.id}`,
+        'moderation-logs',
+        '➖ Salon supprimé',
+        `**Nom :** \`${channel.name}\`\n` +
+        `**ID :** \`${channel.id}\`\n` +
+        `**Type :** ${getChannelTypeName(channel.type)}\n` +
+        `**Catégorie :** ${channel.parent ? channel.parent.name : 'Aucune'}`,
         0xed4245
       );
     } catch (error) {

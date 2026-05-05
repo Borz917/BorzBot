@@ -1,204 +1,397 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const hasPermission = require('../utils/hasPermission');
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder
+} = require('discord.js');
 
-function addCommand(list, member, permissionName, text) {
-  if (hasPermission(member, permissionName)) {
-    list.push(text);
+const rolesConfig = require('../config/roles');
+
+let ownerIds = [];
+
+try {
+  const ownerConfig = require('../config/owner');
+
+  if (Array.isArray(ownerConfig)) {
+    ownerIds = ownerConfig;
+  } else if (Array.isArray(ownerConfig.ownerIds)) {
+    ownerIds = ownerConfig.ownerIds;
+  } else if (ownerConfig.ownerId) {
+    ownerIds = [ownerConfig.ownerId];
   }
+} catch (error) {
+  console.warn('⚠️ config/owner.js introuvable ou invalide.');
 }
 
-function addSection(sections, name, commands) {
-  if (!commands.length) return;
+const STAFF_HELP_ROLES = [
+  'Main Team',
+  'Gérant Staff',
+  'Gérant Global',
+  'Responsable Staff',
+  'BORZ',
+  'Onizuka'
+];
 
+const categories = {
+  general: {
+    label: 'Général',
+    emoji: '📌',
+    commands: [
+      ['help', 'Afficher le menu d’aide'],
+      ['userinfo', 'Afficher les infos utilisateur'],
+      ['serverinfo', 'Afficher les infos serveur'],
+      ['botinfo', 'Afficher les infos du bot'],
+      ['invite', 'Obtenir le lien d’invitation'],
+      ['support', 'Obtenir le serveur support']
+    ]
+  },
+
+  moderation: {
+    label: 'Modération',
+    emoji: '🛡️',
+    commands: [
+      ['ban', 'Bannir un membre'],
+      ['unban', 'Débannir un utilisateur'],
+      ['kick', 'Expulser un membre'],
+      ['warn', 'Avertir un membre'],
+      ['unwarn', 'Retirer un warn'],
+      ['warnlist', 'Voir les warns'],
+      ['clearwarns', 'Supprimer les warns'],
+      ['mute', 'Mute un membre'],
+      ['unmute', 'Unmute un membre'],
+      ['clear', 'Supprimer des messages'],
+      ['lock', 'Verrouiller un salon'],
+      ['unlock', 'Déverrouiller un salon'],
+      ['slowmode', 'Modifier le slowmode']
+    ]
+  },
+
+  roles: {
+    label: 'Rôles',
+    emoji: '🎭',
+    commands: [
+      ['addrole', 'Ajouter un rôle'],
+      ['removerole', 'Retirer un rôle'],
+      ['createrole', 'Créer un rôle'],
+      ['deleterole', 'Supprimer un rôle'],
+      ['sendnotifroles', 'Envoyer le panel notifications']
+    ]
+  },
+
+  tickets: {
+    label: 'Tickets',
+    emoji: '🎫',
+    commands: [
+      ['sendticketpanel', 'Envoyer le panel ticket'],
+      ['close', 'Fermer un ticket'],
+      ['forceclose', 'Forcer la fermeture'],
+      ['ticketinfo', 'Voir les infos ticket'],
+      ['addticketmember', 'Ajouter un membre au ticket'],
+      ['removeticketmember', 'Retirer un membre du ticket'],
+      ['renameticket', 'Renommer un ticket']
+    ]
+  },
+
+  invites: {
+    label: 'Invitations / Giveaways',
+    emoji: '📨',
+    commands: [
+      ['invitelogs', 'Voir les invitations'],
+      ['sendinvitepanel', 'Envoyer le panel invitations'],
+      ['creategiveaway', 'Créer un giveaway'],
+      ['endgiveaway', 'Supprimer un giveaway'],
+      ['resetinvites', 'Reset les invitations']
+    ]
+  },
+
+  announcements: {
+    label: 'Annonces',
+    emoji: '📢',
+    commands: [
+      ['annonceserveur', 'Annonce serveur'],
+      ['annonceillegal', 'Annonce illégal'],
+      ['annoncelegal', 'Annonce légal'],
+      ['annoncegiveaways', 'Annonce giveaways'],
+      ['annonceevenement', 'Annonce événement']
+    ]
+  },
+
+  security: {
+    label: 'Sécurité',
+    emoji: '🔐',
+    commands: [
+      ['securityview', 'Voir la config sécurité'],
+      ['securityspam', 'Configurer anti-spam'],
+      ['securitylink', 'Configurer anti-link'],
+      ['securityignore', 'Gérer les rôles ignorés'],
+      ['securityallowdomain', 'Gérer les domaines autorisés']
+    ]
+  },
+
+  raid: {
+    label: 'Anti-Raid',
+    emoji: '🚨',
+    commands: [
+      ['raidview', 'Voir la config anti-raid'],
+      ['raidconfig', 'Configurer anti-raid'],
+      ['raidlock', 'Verrouiller le serveur'],
+      ['raidunlock', 'Déverrouiller le serveur'],
+      ['raidwhitelist', 'Gérer la whitelist anti-raid']
+    ]
+  },
+
+  config: {
+    label: 'Configuration',
+    emoji: '⚙️',
+    commands: [
+      ['setupbot', 'Créer les salons logs'],
+      ['diagnostic', 'Vérifier la configuration'],
+      ['configview', 'Voir la configuration'],
+      ['configstaffrole', 'Configurer le rôle staff'],
+      ['configlogs', 'Configurer les salons logs'],
+      ['confignotifrole', 'Configurer les rôles annonces'],
+      ['configticketcategory', 'Configurer les catégories tickets'],
+      ['configreset', 'Réinitialiser la config']
+    ]
+  },
+
+  fun: {
+    label: 'Mini-jeux',
+    emoji: '🎮',
+    commands: [
+      ['coinflip', 'Pile ou face'],
+      ['dice', 'Lancer un dé'],
+      ['rps', 'Pierre-feuille-ciseaux'],
+      ['duel', 'Défier un membre'],
+      ['rank', 'Voir son rank duel'],
+      ['leaderboard', 'Classement duel'],
+      ['resetrank', 'Reset les ranks']
+    ]
+  },
+
+  staff: {
+    label: 'Staff Stats',
+    emoji: '📊',
+    commands: [
+      ['staffstats', 'Voir les stats staff'],
+      ['stafftop', 'Top staff actif'],
+      ['resetstaffstats', 'Reset les stats staff']
+    ]
+  }
+};
+
+function isOwner(member) {
+  if (!member) return false;
+
+  const ids = Array.isArray(ownerIds) ? ownerIds : [];
+
+  return ids.includes(member.id);
+}
+
+function isStaffForHelp(member) {
+  if (!member) return false;
+
+  if (isOwner(member)) return true;
+
+  if (member.guild?.ownerId === member.id) return true;
+
+  if (!member.roles?.cache) return false;
+
+  return member.roles.cache.some(role => STAFF_HELP_ROLES.includes(role.name));
+}
+
+function canUseCommand(member, commandName) {
+  if (isStaffForHelp(member)) return true;
+
+  const allowedRoles = rolesConfig[commandName];
+
+  if (!allowedRoles) return false;
+  if (allowedRoles === 'ALL') return true;
+
+  if (!Array.isArray(allowedRoles)) return false;
+
+  return member.roles.cache.some(role => allowedRoles.includes(role.name));
+}
+
+function getPermissionText(commandName) {
+  const allowedRoles = rolesConfig[commandName];
+
+  if (!allowedRoles) return 'Non configuré';
+  if (allowedRoles === 'ALL') return 'Tout le monde';
+  if (Array.isArray(allowedRoles)) return allowedRoles.join(', ');
+
+  return 'Non configuré';
+}
+
+function getCommandsForCategory(member, category, showAll) {
+  if (showAll && isStaffForHelp(member)) {
+    return category.commands;
+  }
+
+  return category.commands.filter(([commandName]) => {
+    return canUseCommand(member, commandName);
+  });
+}
+
+function splitText(text, maxLength = 950) {
+  const lines = text.split('\n');
+  const chunks = [];
   let current = '';
-  let part = 1;
 
-  for (const command of commands) {
-    const line = `${command}\n`;
+  for (const line of lines) {
+    const next = current ? `${current}\n${line}` : line;
 
-    if ((current + line).length > 1000) {
-      sections.push({
-        name: part === 1 ? name : `${name} (${part})`,
-        value: current.trim()
-      });
-
-      part++;
+    if (next.length > maxLength) {
+      if (current) chunks.push(current);
       current = line;
     } else {
-      current += line;
+      current = next;
     }
   }
 
-  if (current.trim().length > 0) {
-    sections.push({
-      name: part === 1 ? name : `${name} (${part})`,
-      value: current.trim()
+  if (current) chunks.push(current);
+
+  return chunks;
+}
+
+function buildCommandText(commands, showPermissions) {
+  if (!commands.length) return 'Aucune commande disponible.';
+
+  return commands
+    .map(([name, desc]) => {
+      if (!showPermissions) {
+        return `\`/${name}\` → ${desc}`;
+      }
+
+      return `\`/${name}\` → ${desc}\nPermission : **${getPermissionText(name)}**`;
+    })
+    .join(showPermissions ? '\n\n' : '\n');
+}
+
+function buildHelpEmbed(interaction, selectedCategoryKey = null, forceShowAll = false) {
+  const member = interaction.member;
+  const showAll = forceShowAll && isStaffForHelp(member);
+  const showPermissions = showAll;
+
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setFooter({ text: `Demandé par ${interaction.user.tag}` })
+    .setTimestamp();
+
+  if (selectedCategoryKey && categories[selectedCategoryKey]) {
+    const category = categories[selectedCategoryKey];
+    const commands = getCommandsForCategory(member, category, showAll);
+    const text = buildCommandText(commands, showPermissions);
+    const chunks = splitText(text, 950);
+
+    embed
+      .setTitle(`${category.emoji} Aide • ${category.label}`)
+      .setDescription(
+        showAll
+          ? 'Mode bypass activé : toutes les commandes sont affichées.'
+          : 'Voici les commandes disponibles pour toi.'
+      );
+
+    chunks.forEach((chunk, index) => {
+      embed.addFields({
+        name: index === 0 ? 'Commandes' : `Commandes suite ${index + 1}`,
+        value: chunk,
+        inline: false
+      });
+    });
+
+    return embed;
+  }
+
+  embed
+    .setTitle('📚 Aide BorzBot')
+    .setDescription(
+      showAll
+        ? 'Mode bypass activé : toutes les commandes du bot sont visibles.'
+        : 'Sélectionne une catégorie dans le menu ci-dessous.'
+    );
+
+  for (const [key, category] of Object.entries(categories)) {
+    const commands = getCommandsForCategory(member, category, showAll);
+
+    if (!commands.length) continue;
+
+    embed.addFields({
+      name: `${category.emoji} ${category.label}`,
+      value: `${commands.length} commande(s)`,
+      inline: true
     });
   }
+
+  return embed;
+}
+
+function buildSelectMenu(member, showAll = false) {
+  const realShowAll = showAll && isStaffForHelp(member);
+  const options = [];
+
+  for (const [key, category] of Object.entries(categories)) {
+    const commands = getCommandsForCategory(member, category, realShowAll);
+
+    if (!commands.length) continue;
+
+    options.push({
+      label: category.label,
+      value: realShowAll ? `${key}:all` : key,
+      description: `${commands.length} commande(s)`,
+      emoji: category.emoji
+    });
+  }
+
+  if (!options.length) {
+    options.push({
+      label: 'Aucune commande',
+      value: 'none',
+      description: 'Aucune commande disponible',
+      emoji: '❌'
+    });
+  }
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('help_category_menu')
+    .setPlaceholder('Choisis une catégorie')
+    .addOptions(options.slice(0, 25));
+
+  return new ActionRowBuilder().addComponents(menu);
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('help')
-    .setDescription('Affiche les commandes disponibles'),
+    .setDescription('Afficher la liste des commandes du bot')
+    .addBooleanOption(option =>
+      option
+        .setName('all')
+        .setDescription('Afficher toutes les commandes, bypass owner/staff')
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    const requestedAll = interaction.options.getBoolean('all') || false;
+    const showAll = requestedAll && isStaffForHelp(interaction.member);
 
-    const sections = [];
+    if (requestedAll && !showAll) {
+      return interaction.reply({
+        content: '❌ Tu n’as pas accès au mode bypass du `/help`.',
+        ephemeral: true
+      });
+    }
 
-    const generalCommands = [];
-    const funCommands = [];
-    const ticketCommands = [];
-    const moderationCommands = [];
-    const warnCommands = [];
-    const roleCommands = [];
-    const annonceCommands = [];
-    const securityCommands = [];
-    const configCommands = [];
-    const staffCommands = [];
+    const embed = buildHelpEmbed(interaction, null, showAll);
+    const row = buildSelectMenu(interaction.member, showAll);
 
-    // =========================
-    // GÉNÉRAL
-    // =========================
-    addCommand(generalCommands, interaction.member, 'help', '`/help` → Afficher ce menu');
-    addCommand(generalCommands, interaction.member, 'userinfo', '`/userinfo` → Infos utilisateur');
-    addCommand(generalCommands, interaction.member, 'serverinfo', '`/serverinfo` → Infos serveur');
-    addCommand(generalCommands, interaction.member, 'botinfo', '`/botinfo` → Infos du bot');
-    addCommand(generalCommands, interaction.member, 'invite', '`/invite` → Inviter le bot');
-    addCommand(generalCommands, interaction.member, 'support', '`/support` → Serveur support');
-    addCommand(generalCommands, interaction.member, 'invitelogs', '`/invitelogs` → Voir les invitations');
-
-    // =========================
-    // MINI-JEUX
-    // =========================
-    addCommand(funCommands, interaction.member, 'coinflip', '`/coinflip` → Pile ou face');
-    addCommand(funCommands, interaction.member, 'dice', '`/dice` → Lancer un dé');
-    addCommand(funCommands, interaction.member, 'rps', '`/rps` → Pierre, feuille, ciseaux');
-    addCommand(funCommands, interaction.member, 'duel', '`/duel` → Duel 1vs1');
-    addCommand(funCommands, interaction.member, 'rank', '`/rank` → Voir ton rank 1vs1');
-    addCommand(funCommands, interaction.member, 'leaderboard', '`/leaderboard` → Classement ranked');
-
-    // =========================
-    // TICKETS
-    // =========================
-    addCommand(ticketCommands, interaction.member, 'ticketinfo', '`/ticketinfo` → Voir les infos du ticket');
-    addCommand(ticketCommands, interaction.member, 'sendticketpanel', '`/sendticketpanel` → Envoyer le panel ticket');
-    addCommand(ticketCommands, interaction.member, 'close', '`/close` → Fermer un ticket');
-    addCommand(ticketCommands, interaction.member, 'forceclose', '`/forceclose` → Fermer un ticket cassé');
-    addCommand(ticketCommands, interaction.member, 'addticketmember', '`/addticketmember` → Ajouter un membre au ticket');
-    addCommand(ticketCommands, interaction.member, 'removeticketmember', '`/removeticketmember` → Retirer un membre du ticket');
-    addCommand(ticketCommands, interaction.member, 'renameticket', '`/renameticket` → Renommer un ticket');
-
-    // =========================
-    // MODÉRATION
-    // =========================
-    addCommand(moderationCommands, interaction.member, 'ban', '`/ban` → Bannir un membre');
-    addCommand(moderationCommands, interaction.member, 'unban', '`/unban` → Débannir un membre');
-    addCommand(moderationCommands, interaction.member, 'kick', '`/kick` → Expulser un membre');
-    addCommand(moderationCommands, interaction.member, 'mute', '`/mute` → Timeout un membre');
-    addCommand(moderationCommands, interaction.member, 'unmute', '`/unmute` → Retirer un timeout');
-    addCommand(moderationCommands, interaction.member, 'clear', '`/clear` → Supprimer des messages');
-    addCommand(moderationCommands, interaction.member, 'lock', '`/lock` → Verrouiller un salon');
-    addCommand(moderationCommands, interaction.member, 'unlock', '`/unlock` → Déverrouiller un salon');
-    addCommand(moderationCommands, interaction.member, 'slowmode', '`/slowmode` → Modifier le slowmode');
-
-    // =========================
-    // AVERTISSEMENTS
-    // =========================
-    addCommand(warnCommands, interaction.member, 'warn', '`/warn` → Ajouter un avertissement');
-    addCommand(warnCommands, interaction.member, 'unwarn', '`/unwarn` → Retirer un avertissement');
-    addCommand(warnCommands, interaction.member, 'warnlist', '`/warnlist` → Voir les avertissements');
-    addCommand(warnCommands, interaction.member, 'clearwarns', '`/clearwarns` → Supprimer tous les warns');
-
-    // =========================
-    // RÔLES
-    // =========================
-    addCommand(roleCommands, interaction.member, 'addrole', '`/addrole` → Ajouter un rôle');
-    addCommand(roleCommands, interaction.member, 'removerole', '`/removerole` → Retirer un rôle');
-    addCommand(roleCommands, interaction.member, 'createrole', '`/createrole` → Créer un rôle');
-    addCommand(roleCommands, interaction.member, 'deleterole', '`/deleterole` → Supprimer un rôle');
-    addCommand(roleCommands, interaction.member, 'sendnotifroles', '`/sendnotifroles` → Envoyer les rôles notifications');
-
-    // =========================
-    // ANNONCES
-    // =========================
-    addCommand(annonceCommands, interaction.member, 'annonceserveur', '`/annonceserveur` → Annonce avec @everyone');
-    addCommand(annonceCommands, interaction.member, 'annonceillegal', '`/annonceillegal` → Annonce Illégal');
-    addCommand(annonceCommands, interaction.member, 'annoncelegal', '`/annoncelegal` → Annonce Légal');
-    addCommand(annonceCommands, interaction.member, 'annoncegiveaways', '`/annoncegiveaways` → Annonce Giveaways');
-    addCommand(annonceCommands, interaction.member, 'annonceevenement', '`/annonceevenement` → Annonce Événement');
-
-    // =========================
-    // INVITATIONS / GIVEAWAYS
-    // =========================
-    addCommand(generalCommands, interaction.member, 'sendinvitepanel', '`/sendinvitepanel` → Envoyer le panel invitations');
-    addCommand(generalCommands, interaction.member, 'creategiveaway', '`/creategiveaway` → Créer un giveaway invitations');
-    addCommand(generalCommands, interaction.member, 'endgiveaway', '`/endgiveaway` → Supprimer un giveaway invitations');
-    addCommand(generalCommands, interaction.member, 'resetinvites', '`/resetinvites` → Reset les invitations');
-
-    // =========================
-    // CONFIGURATION
-    // =========================
-    addCommand(configCommands, interaction.member, 'configview', '`/configview` → Voir la configuration serveur');
-    addCommand(configCommands, interaction.member, 'configstaffrole', '`/configstaffrole` → Configurer le rôle staff');
-    addCommand(configCommands, interaction.member, 'configlogs', '`/configlogs` → Configurer les salons logs');
-    addCommand(configCommands, interaction.member, 'confignotifrole', '`/confignotifrole` → Configurer les rôles notifications');
-    addCommand(configCommands, interaction.member, 'configticketcategory', '`/configticketcategory` → Configurer les catégories tickets');
-    addCommand(configCommands, interaction.member, 'configreset', '`/configreset` → Réinitialiser la configuration serveur');
-    addCommand(configCommands, interaction.member, 'setupbot', '`/setupbot` → Créer les salons logs nécessaires');
-    addCommand(configCommands, interaction.member, 'diagnostic', '`/diagnostic` → Vérifier la configuration du bot');
-
-    // =========================
-    // SÉCURITÉ
-    // =========================
-    addCommand(securityCommands, interaction.member, 'securityview', '`/securityview` → Voir la configuration sécurité');
-    addCommand(securityCommands, interaction.member, 'securityspam', '`/securityspam` → Configurer l’anti-spam');
-    addCommand(securityCommands, interaction.member, 'securitylink', '`/securitylink` → Configurer l’anti-link');
-    addCommand(securityCommands, interaction.member, 'securityignore', '`/securityignore` → Ignorer un rôle sécurité');
-    addCommand(securityCommands, interaction.member, 'securityallowdomain', '`/securityallowdomain` → Gérer les domaines autorisés');
-    addCommand(securityCommands, interaction.member, 'raidview', '`/raidview` → Voir la config anti-raid');
-    addCommand(securityCommands, interaction.member, 'raidconfig', '`/raidconfig` → Configurer l’anti-raid');
-    addCommand(securityCommands, interaction.member, 'raidlock', '`/raidlock` → Verrouiller le serveur');
-    addCommand(securityCommands, interaction.member, 'raidunlock', '`/raidunlock` → Déverrouiller le serveur');
-    addCommand(securityCommands, interaction.member, 'raidwhitelist', '`/raidwhitelist` → Gérer la whitelist anti-raid');
-
-    // =========================
-    // STAFF
-    // =========================
-    addCommand(staffCommands, interaction.member, 'staffstats', '`/staffstats` → Voir les stats staff');
-    addCommand(staffCommands, interaction.member, 'stafftop', '`/stafftop` → Top staff actif');
-    addCommand(staffCommands, interaction.member, 'resetstaffstats', '`/resetstaffstats` → Reset les stats staff');
-    addCommand(staffCommands, interaction.member, 'resetrank', '`/resetrank` → Reset le rank d’un joueur');
-
-    // =========================
-    // SECTIONS
-    // =========================
-    addSection(sections, '⚙️ Général', generalCommands);
-    addSection(sections, '🎮 Mini-jeux', funCommands);
-    addSection(sections, '🎫 Tickets', ticketCommands);
-    addSection(sections, '🔨 Modération', moderationCommands);
-    addSection(sections, '⚠️ Avertissements', warnCommands);
-    addSection(sections, '🎭 Rôles', roleCommands);
-    addSection(sections, '📢 Annonces', annonceCommands);
-    addSection(sections, '🛡️ Sécurité', securityCommands);
-    addSection(sections, '🧩 Configuration', configCommands);
-    addSection(sections, '📊 Staff', staffCommands);
-
-    const embed = new EmbedBuilder()
-      .setTitle('📘 BorzBot • Aide')
-      .setDescription('Voici les commandes disponibles selon tes permissions.')
-      .setColor(0x5865f2)
-      .addFields(
-        sections.length > 0
-          ? sections
-          : [{ name: 'Aucune commande', value: 'Aucune commande disponible pour toi.' }]
-      )
-      .setFooter({ text: `Demandé par ${interaction.user.tag}` })
-      .setTimestamp();
-
-    await interaction.editReply({
-      embeds: [embed]
+    return interaction.reply({
+      embeds: [embed],
+      components: [row],
+      ephemeral: true
     });
-  }
+  },
+
+  buildHelpEmbed,
+  buildSelectMenu
 };
