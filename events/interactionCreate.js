@@ -2,6 +2,7 @@ const {
   Events,
   ChannelType,
   PermissionsBitField,
+  PermissionFlagsBits,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -9,36 +10,37 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle
-} = require('discord.js');
+} = require("discord.js");
 
-const { getServerConfig } = require('../utils/serverConfig');
-const { getUserInvites, getGuildInvites } = require('../utils/inviteStore');
-const { getActiveGiveaways } = require('../utils/giveawayStore');
-const createTranscript = require('../utils/createTranscript');
-const { addStaffAction } = require('../utils/staffStatsStore');
+const { getServerConfig } = require("../utils/serverConfig");
+const { getUserInvites, getGuildInvites } = require("../utils/inviteStore");
+const { getActiveGiveaways } = require("../utils/giveawayStore");
+const createTranscript = require("../utils/createTranscript");
+const { addStaffAction } = require("../utils/staffStatsStore");
 
 const {
   getDuel,
   updateDuel,
   deleteDuel,
   addWin
-} = require('../utils/duelStore');
+} = require("../utils/duelStore");
 
-const ticketConfig = require('../config/ticketConfig');
-const notifConfig = require('../config/notifRoles');
+const ticketConfig = require("../config/ticketConfig");
+const notifConfig = require("../config/notifRoles");
+const GuildConfig = require("../models/GuildConfig");
 
 const {
   getTicket,
   setTicket,
   deleteTicket,
   findTicketByChannelId
-} = require('../utils/ticketStore');
+} = require("../utils/ticketStore");
 
-const sendTicketLog = require('../utils/sendTicketLog');
+const sendTicketLog = require("../utils/sendTicketLog");
 
 function buildClaimButtonLabel(count) {
-  if (count <= 0) return 'Prendre en charge';
-  if (count === 1) return 'Repris par 1 staff';
+  if (count <= 0) return "Prendre en charge";
+  if (count === 1) return "Repris par 1 staff";
   return `Repris par ${count} staff`;
 }
 
@@ -68,9 +70,18 @@ async function safeReply(interaction, options) {
 
     return await interaction.reply(options);
   } catch (error) {
-    console.error('❌ Erreur safeReply :', error);
+    console.error("❌ Erreur safeReply :", error);
     return null;
   }
+}
+
+function makeSafeChannelName(text) {
+  return String(text || "ticket")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9-_]/g, "")
+    .slice(0, 20);
 }
 
 module.exports = {
@@ -80,7 +91,7 @@ module.exports = {
     try {
       if (!interaction.guild) {
         return safeReply(interaction, {
-          content: '❌ Cette interaction doit être utilisée dans un serveur.',
+          content: "❌ Cette interaction doit être utilisée dans un serveur.",
           ephemeral: true
         });
       }
@@ -91,27 +102,27 @@ module.exports = {
 
       if (interaction.isStringSelectMenu()) {
         /* HELP MENU */
-        if (interaction.customId === 'help_category_menu') {
-          const helpCommand = client.commands.get('help');
+        if (interaction.customId === "help_category_menu") {
+          const helpCommand = client.commands.get("help");
 
           if (!helpCommand || !helpCommand.buildHelpEmbed || !helpCommand.buildSelectMenu) {
             return interaction.reply({
-              content: '❌ Le menu help est mal configuré.',
+              content: "❌ Le menu help est mal configuré.",
               ephemeral: true
             });
           }
 
           const rawValue = interaction.values[0];
 
-          if (rawValue === 'none') {
+          if (rawValue === "none") {
             return interaction.reply({
-              content: '❌ Aucune catégorie disponible.',
+              content: "❌ Aucune catégorie disponible.",
               ephemeral: true
             });
           }
 
-          const [selectedCategory, mode] = rawValue.split(':');
-          const showAll = mode === 'all';
+          const [selectedCategory, mode] = rawValue.split(":");
+          const showAll = mode === "all";
 
           const embed = helpCommand.buildHelpEmbed(interaction, selectedCategory, showAll);
           const row = helpCommand.buildSelectMenu(interaction.member, showAll);
@@ -122,11 +133,236 @@ module.exports = {
           });
         }
 
+        /* TICKET SUBJECT MENU - nouveau système dynamique MongoDB */
+        if (interaction.customId === "ticket_subject") {
+          const selectedValue = interaction.values[0];
+          const subjectIndex = Number(selectedValue.replace("ticket_", ""));
+
+          if (Number.isNaN(subjectIndex)) {
+            return interaction.reply({
+              content: "❌ Sujet invalide.",
+              ephemeral: true
+            });
+          }
+
+          const config = await GuildConfig.findOne({
+            guildId: interaction.guild.id
+          });
+
+          if (!config) {
+            return interaction.reply({
+              content: "❌ Configuration introuvable. Utilise d'abord `/setupbot`.",
+              ephemeral: true
+            });
+          }
+
+          if (!config.ticketCategoryId) {
+            return interaction.reply({
+              content: "❌ Catégorie ticket non configurée. Utilise `/setupbot`.",
+              ephemeral: true
+            });
+          }
+
+          if (!config.staffRoleId) {
+            return interaction.reply({
+              content: "❌ Rôle staff non configuré. Utilise `/setupbot`.",
+              ephemeral: true
+            });
+          }
+
+          const subject = config.ticketSubjects?.[subjectIndex];
+
+          if (!subject) {
+            return interaction.reply({
+              content: "❌ Sujet de ticket introuvable ou mal configuré.",
+              ephemeral: true
+            });
+          }
+
+          const existingTicket = getTicket(interaction.user.id);
+
+          if (existingTicket?.channelId) {
+            const existingChannel = interaction.guild.channels.cache.get(existingTicket.channelId);
+
+            if (existingChannel) {
+              return interaction.reply({
+                content: `❌ Tu as déjà un ticket ouvert : ${existingChannel}`,
+                ephemeral: true
+              });
+            }
+
+            deleteTicket(interaction.user.id);
+          }
+
+          const category = interaction.guild.channels.cache.get(config.ticketCategoryId);
+
+          if (!category || category.type !== ChannelType.GuildCategory) {
+            return interaction.reply({
+              content: "❌ La catégorie ticket configurée est introuvable ou invalide.",
+              ephemeral: true
+            });
+          }
+
+          const staffRole = interaction.guild.roles.cache.get(config.staffRoleId);
+
+          if (!staffRole) {
+            return interaction.reply({
+              content: "❌ Le rôle staff configuré est introuvable.",
+              ephemeral: true
+            });
+          }
+
+          const safeUsername = makeSafeChannelName(interaction.user.username);
+          const safeSubject = makeSafeChannelName(subject.label || "support");
+
+          const ticketChannel = await interaction.guild.channels.create({
+            name: `${safeSubject}-${safeUsername}`,
+            type: ChannelType.GuildText,
+            parent: category.id,
+            permissionOverwrites: [
+              {
+                id: interaction.guild.id,
+                deny: [PermissionFlagsBits.ViewChannel]
+              },
+              {
+                id: interaction.user.id,
+                allow: [
+                  PermissionFlagsBits.ViewChannel,
+                  PermissionFlagsBits.SendMessages,
+                  PermissionFlagsBits.ReadMessageHistory,
+                  PermissionFlagsBits.AttachFiles,
+                  PermissionFlagsBits.EmbedLinks
+                ]
+              },
+              {
+                id: config.staffRoleId,
+                allow: [
+                  PermissionFlagsBits.ViewChannel,
+                  PermissionFlagsBits.SendMessages,
+                  PermissionFlagsBits.ReadMessageHistory,
+                  PermissionFlagsBits.ManageMessages,
+                  PermissionFlagsBits.AttachFiles,
+                  PermissionFlagsBits.EmbedLinks
+                ]
+              },
+              {
+                id: interaction.client.user.id,
+                allow: [
+                  PermissionFlagsBits.ViewChannel,
+                  PermissionFlagsBits.SendMessages,
+                  PermissionFlagsBits.ManageChannels,
+                  PermissionFlagsBits.ManageMessages,
+                  PermissionFlagsBits.ReadMessageHistory,
+                  PermissionFlagsBits.AttachFiles,
+                  PermissionFlagsBits.EmbedLinks
+                ]
+              }
+            ]
+          });
+
+          setTicket(interaction.user.id, {
+            channelId: ticketChannel.id,
+            subject: `${subject.emoji || "🎫"} ${subject.label || "Support"}`,
+            subjectId: `mongo_${subjectIndex}`,
+            mongoSubjectIndex: subjectIndex,
+            logChannelId: subject.logChannelId || null,
+            claimedBy: []
+          });
+
+          const ticketEmbed = new EmbedBuilder()
+            .setColor(0x5865f2)
+            .setTitle(`${subject.emoji || "🎫"} Ticket - ${subject.label || "Support"}`)
+            .setDescription(
+              `Bienvenue ${interaction.user}.\n\n` +
+              `Merci d'expliquer ta demande clairement.\n` +
+              `Un membre du staff va te répondre dès que possible.`
+            )
+            .addFields(
+              {
+                name: "📌 Sujet",
+                value: `${subject.emoji || "🎫"} ${subject.label || "Support"}`,
+                inline: true
+              },
+              {
+                name: "👤 Utilisateur",
+                value: `${interaction.user}`,
+                inline: true
+              },
+              {
+                name: "🛠️ Équipe STAFF en charge",
+                value: "Personne",
+                inline: false
+              }
+            )
+            .setFooter({
+              text: "BorzBot Support"
+            })
+            .setTimestamp();
+
+          const buttons = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId("ticket_claim_button")
+              .setLabel(buildClaimButtonLabel(0))
+              .setStyle(ButtonStyle.Primary),
+
+            new ButtonBuilder()
+              .setCustomId("ticket_close_button")
+              .setLabel("Fermer le ticket")
+              .setEmoji("🔒")
+              .setStyle(ButtonStyle.Danger)
+          );
+
+          await ticketChannel.send({
+            content: `${interaction.user} <@&${config.staffRoleId}>`,
+            embeds: [ticketEmbed],
+            components: [buttons]
+          });
+
+          await interaction.reply({
+            content: `✅ Ton ticket a été créé : ${ticketChannel}`,
+            ephemeral: true
+          });
+
+          if (subject.logChannelId) {
+            const logChannel = interaction.guild.channels.cache.get(subject.logChannelId);
+
+            if (logChannel) {
+              const logEmbed = new EmbedBuilder()
+                .setColor(0x57f287)
+                .setTitle("🎫 Ticket ouvert")
+                .addFields(
+                  {
+                    name: "👤 Utilisateur",
+                    value: `${interaction.user} \`${interaction.user.id}\``,
+                    inline: false
+                  },
+                  {
+                    name: "📌 Sujet",
+                    value: `${subject.emoji || "🎫"} ${subject.label || "Support"}`,
+                    inline: true
+                  },
+                  {
+                    name: "📁 Salon",
+                    value: `${ticketChannel}`,
+                    inline: true
+                  }
+                )
+                .setTimestamp();
+
+              await logChannel.send({
+                embeds: [logEmbed]
+              });
+            }
+          }
+
+          return;
+        }
+
         /* INVITE PANEL */
-        if (interaction.customId === 'invite_panel_menu') {
+        if (interaction.customId === "invite_panel_menu") {
           const selected = interaction.values[0];
 
-          if (selected === 'top15') {
+          if (selected === "top15") {
             const guildData = getGuildInvites(interaction.guild.id);
 
             const leaderboard = Object.entries(guildData)
@@ -135,7 +371,7 @@ module.exports = {
 
             if (!leaderboard.length) {
               return interaction.reply({
-                content: '📨 Aucun invite log enregistré pour le moment.',
+                content: "📨 Aucun invite log enregistré pour le moment.",
                 ephemeral: true
               });
             }
@@ -143,17 +379,17 @@ module.exports = {
             const text = leaderboard
               .map(([userId, data], index) => {
                 const medal =
-                  index === 0 ? '🥇' :
-                    index === 1 ? '🥈' :
-                      index === 2 ? '🥉' :
-                        `#${index + 1}`;
+                  index === 0 ? "🥇" :
+                  index === 1 ? "🥈" :
+                  index === 2 ? "🥉" :
+                  `#${index + 1}`;
 
                 return `${medal} <@${userId}> — **${data.total || 0} invitation(s)**`;
               })
-              .join('\n');
+              .join("\n");
 
             const embed = new EmbedBuilder()
-              .setTitle('🏆 Top 15 Invitations')
+              .setTitle("🏆 Top 15 Invitations")
               .setDescription(text)
               .setColor(0xfaa61a)
               .setTimestamp();
@@ -164,16 +400,16 @@ module.exports = {
             });
           }
 
-          if (selected === 'myinvites') {
+          if (selected === "myinvites") {
             const data = getUserInvites(interaction.guild.id, interaction.user.id);
 
             const embed = new EmbedBuilder()
-              .setTitle('📨 Mes invitations')
+              .setTitle("📨 Mes invitations")
               .setDescription(
                 `**Membre :** ${interaction.user}\n` +
                 `**Invitations confirmées :** ${data.total || 0}\n\n` +
                 `**Personnes invitées :**\n` +
-                `${data.users?.length > 0 ? data.users.map(id => `• <@${id}>`).join('\n') : 'Aucune'}`
+                `${data.users?.length > 0 ? data.users.map(id => `• <@${id}>`).join("\n") : "Aucune"}`
               )
               .setColor(0x5865f2)
               .setTimestamp();
@@ -184,12 +420,12 @@ module.exports = {
             });
           }
 
-          if (selected === 'giveaways') {
+          if (selected === "giveaways") {
             const giveaways = getActiveGiveaways(interaction.guild.id);
 
             if (!giveaways.length) {
               return interaction.reply({
-                content: '🎁 Aucun giveaway en cours pour le moment.',
+                content: "🎁 Aucun giveaway en cours pour le moment.",
                 ephemeral: true
               });
             }
@@ -205,14 +441,14 @@ module.exports = {
                   `**Récompense :** ${g.reward}\n` +
                   `**Invitations nécessaires :** ${g.invitesRequired}\n` +
                   `**Ton total :** ${userInvites.total || 0}\n` +
-                  `**Statut :** ${canEnter ? '✅ Éligible' : '❌ Pas assez d’invitations'}\n` +
+                  `**Statut :** ${canEnter ? "✅ Éligible" : "❌ Pas assez d’invitations"}\n` +
                   `**ID :** \`${g.id}\``
                 );
               })
-              .join('\n\n━━━━━━━━━━━━━━\n\n');
+              .join("\n\n━━━━━━━━━━━━━━\n\n");
 
             const embed = new EmbedBuilder()
-              .setTitle('🎁 Giveaways en cours')
+              .setTitle("🎁 Giveaways en cours")
               .setDescription(text.slice(0, 4000))
               .setColor(0x57f287)
               .setTimestamp();
@@ -226,8 +462,8 @@ module.exports = {
           return;
         }
 
-        /* TICKET CREATE MENU */
-        if (interaction.customId === 'ticket_create_menu') {
+        /* ANCIEN TICKET CREATE MENU */
+        if (interaction.customId === "ticket_create_menu") {
           const existingTicket = getTicket(interaction.user.id);
 
           if (existingTicket?.channelId) {
@@ -251,7 +487,7 @@ module.exports = {
 
           if (!subject) {
             return interaction.reply({
-              content: '❌ Sujet invalide.',
+              content: "❌ Sujet invalide.",
               ephemeral: true
             });
           }
@@ -259,14 +495,14 @@ module.exports = {
           const serverConfig = getServerConfig(interaction.guild.id);
 
           const categoryKeyBySubject = {
-            questions_boutique: 'boutique',
-            support_general: 'support',
-            recrutement_equipe: 'recrutement',
-            pole_illegal: 'illegal',
-            pole_legal: 'legal',
-            demande_unban: 'unban',
-            contact_fonda: 'fonda',
-            plainte_staff: 'plainte_staff'
+            questions_boutique: "boutique",
+            support_general: "support",
+            recrutement_equipe: "recrutement",
+            pole_illegal: "illegal",
+            pole_legal: "legal",
+            demande_unban: "unban",
+            contact_fonda: "fonda",
+            plainte_staff: "plainte_staff"
           };
 
           const categoryKey = categoryKeyBySubject[subject.id];
@@ -306,19 +542,14 @@ module.exports = {
             return interaction.reply({
               content:
                 `❌ Catégorie ticket introuvable pour **${subject.label}**.\n` +
-                `Configure-la avec \`/configticketcategory\`.`,
+                "Configure-la avec `/configticketcategory`.",
               ephemeral: true
             });
           }
 
           const staffRole = getConfiguredStaffRole(interaction.guild);
 
-          const safeName = (interaction.user.username || interaction.user.id)
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9-_]/g, '')
-            .slice(0, 12);
+          const safeName = makeSafeChannelName(interaction.user.username || interaction.user.id);
 
           const channel = await interaction.guild.channels.create({
             name: `${subject.id}-${safeName}`,
@@ -350,13 +581,13 @@ module.exports = {
               },
               ...(staffRole
                 ? [{
-                  id: staffRole.id,
-                  allow: [
-                    PermissionsBitField.Flags.ViewChannel,
-                    PermissionsBitField.Flags.SendMessages,
-                    PermissionsBitField.Flags.ReadMessageHistory
-                  ]
-                }]
+                    id: staffRole.id,
+                    allow: [
+                      PermissionsBitField.Flags.ViewChannel,
+                      PermissionsBitField.Flags.SendMessages,
+                      PermissionsBitField.Flags.ReadMessageHistory
+                    ]
+                  }]
                 : [])
             ]
           });
@@ -369,31 +600,31 @@ module.exports = {
           });
 
           const embed = new EmbedBuilder()
-            .setTitle('🎫 Ticket ouvert')
+            .setTitle("🎫 Ticket ouvert")
             .setDescription(
               `**Utilisateur :** ${interaction.user}\n` +
               `**Sujet :** ${subject.label}\n` +
               `**Catégorie :** ${categoryName}\n` +
               `**Statut :** En attente\n` +
               `**Équipe STAFF en charge :** Personne\n\n` +
-              `Explique ta demande dans ce salon.`
+              "Explique ta demande dans ce salon."
             )
             .setColor(0x5865f2)
             .setTimestamp();
 
           const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setCustomId('ticket_claim_button')
+              .setCustomId("ticket_claim_button")
               .setLabel(buildClaimButtonLabel(0))
               .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
-              .setCustomId('ticket_close_button')
-              .setLabel('Fermer le ticket')
+              .setCustomId("ticket_close_button")
+              .setLabel("Fermer le ticket")
               .setStyle(ButtonStyle.Danger)
           );
 
           await channel.send({
-            content: `${interaction.user}${staffRole ? ` <@&${staffRole.id}>` : ''}`,
+            content: `${interaction.user}${staffRole ? ` <@&${staffRole.id}>` : ""}`,
             embeds: [embed],
             components: [row]
           });
@@ -401,7 +632,7 @@ module.exports = {
           await sendTicketLog(
             interaction.guild,
             subject.id,
-            '🎫 Ticket ouvert',
+            "🎫 Ticket ouvert",
             `**Utilisateur :** ${interaction.user}\n` +
             `**Sujet :** ${subject.label}\n` +
             `**Catégorie :** ${categoryName}\n` +
@@ -423,16 +654,16 @@ module.exports = {
       ========================= */
 
       if (interaction.isModalSubmit()) {
-        if (!interaction.customId.startsWith('ticket_close_modal_')) return;
+        if (!interaction.customId.startsWith("ticket_close_modal_")) return;
 
         await interaction.deferReply({ ephemeral: true });
 
-        const channelId = interaction.customId.replace('ticket_close_modal_', '');
+        const channelId = interaction.customId.replace("ticket_close_modal_", "");
         const channel = interaction.guild.channels.cache.get(channelId);
 
         if (!channel) {
           return interaction.editReply({
-            content: '❌ Salon introuvable.'
+            content: "❌ Salon introuvable."
           });
         }
 
@@ -440,45 +671,69 @@ module.exports = {
 
         if (!ticketData) {
           return interaction.editReply({
-            content: '❌ Ce salon n’est pas un ticket.'
+            content: "❌ Ce salon n’est pas un ticket."
           });
         }
 
-        const reason = interaction.fields.getTextInputValue('close_reason');
+        const reason = interaction.fields.getTextInputValue("close_reason");
 
         const claimedMentions =
           Array.isArray(ticketData.claimedBy) && ticketData.claimedBy.length > 0
-            ? ticketData.claimedBy.map(id => `<@${id}>`).join(', ')
-            : 'Personne';
+            ? ticketData.claimedBy.map(id => `<@${id}>`).join(", ")
+            : "Personne";
 
         let transcript = null;
 
         try {
           transcript = await createTranscript(channel);
         } catch (error) {
-          console.error('Erreur transcript :', error);
+          console.error("Erreur transcript :", error);
         }
 
-        addStaffAction(interaction.guild.id, interaction.user.id, 'ticketCloses');
+        addStaffAction(interaction.guild.id, interaction.user.id, "ticketCloses");
 
         deleteTicket(ticketData.userId);
 
-        await sendTicketLog(
-          interaction.guild,
-          ticketData.subjectId,
-          '🔒 Ticket fermé',
-          `**Utilisateur :** <@${ticketData.userId}>\n` +
-          `**Sujet :** ${ticketData.subject}\n` +
-          `**Pris en charge par :** ${claimedMentions}\n` +
-          `**Fermé par :** ${interaction.user}\n` +
-          `**Raison :** ${reason}\n` +
-          `**Salon :** #${channel.name}`,
-          0xed4245,
-          transcript ? [transcript] : []
-        );
+        if (ticketData.logChannelId) {
+          const logChannel = interaction.guild.channels.cache.get(ticketData.logChannelId);
+
+          if (logChannel) {
+            const closeEmbed = new EmbedBuilder()
+              .setColor(0xed4245)
+              .setTitle("🔒 Ticket fermé")
+              .setDescription(
+                `**Utilisateur :** <@${ticketData.userId}>\n` +
+                `**Sujet :** ${ticketData.subject}\n` +
+                `**Pris en charge par :** ${claimedMentions}\n` +
+                `**Fermé par :** ${interaction.user}\n` +
+                `**Raison :** ${reason}\n` +
+                `**Salon :** #${channel.name}`
+              )
+              .setTimestamp();
+
+            await logChannel.send({
+              embeds: [closeEmbed],
+              files: transcript ? [transcript] : []
+            });
+          }
+        } else {
+          await sendTicketLog(
+            interaction.guild,
+            ticketData.subjectId,
+            "🔒 Ticket fermé",
+            `**Utilisateur :** <@${ticketData.userId}>\n` +
+            `**Sujet :** ${ticketData.subject}\n` +
+            `**Pris en charge par :** ${claimedMentions}\n` +
+            `**Fermé par :** ${interaction.user}\n` +
+            `**Raison :** ${reason}\n` +
+            `**Salon :** #${channel.name}`,
+            0xed4245,
+            transcript ? [transcript] : []
+          );
+        }
 
         await interaction.editReply({
-          content: '✅ Ticket fermé + transcript envoyé.'
+          content: "✅ Ticket fermé + transcript envoyé."
         });
 
         setTimeout(async () => {
@@ -494,13 +749,13 @@ module.exports = {
 
       if (interaction.isButton()) {
         /* NOTIF ROLES */
-        if (interaction.customId?.startsWith('notif_role_')) {
-          const roleId = interaction.customId.replace('notif_role_', '');
+        if (interaction.customId?.startsWith("notif_role_")) {
+          const roleId = interaction.customId.replace("notif_role_", "");
           const roleData = notifConfig.roles.find(role => role.id === roleId);
 
           if (!roleData) {
             return interaction.reply({
-              content: '❌ Rôle notification introuvable.',
+              content: "❌ Rôle notification introuvable.",
               ephemeral: true
             });
           }
@@ -541,17 +796,26 @@ module.exports = {
         }
 
         /* TICKET CLAIM */
-        if (interaction.customId === 'ticket_claim_button') {
+        if (interaction.customId === "ticket_claim_button") {
           const ticketData = findTicketByChannelId(interaction.channel.id);
 
           if (!ticketData) {
             return interaction.reply({
-              content: '❌ Ce salon n’est pas un ticket.',
+              content: "❌ Ce salon n’est pas un ticket.",
               ephemeral: true
             });
           }
 
-          const staffRole = getConfiguredStaffRole(interaction.guild);
+          const config = await GuildConfig.findOne({
+            guildId: interaction.guild.id
+          });
+
+          const mongoStaffRole = config?.staffRoleId
+            ? interaction.guild.roles.cache.get(config.staffRoleId)
+            : null;
+
+          const oldStaffRole = getConfiguredStaffRole(interaction.guild);
+          const staffRole = mongoStaffRole || oldStaffRole;
 
           const hasStaffRole =
             staffRole && interaction.member.roles.cache.has(staffRole.id);
@@ -562,7 +826,7 @@ module.exports = {
 
           if (!hasStaffRole && !canManage) {
             return interaction.reply({
-              content: '❌ Tu ne peux pas prendre ce ticket en charge.',
+              content: "❌ Tu ne peux pas prendre ce ticket en charge.",
               ephemeral: true
             });
           }
@@ -573,40 +837,39 @@ module.exports = {
 
           if (!claimedByList.includes(interaction.user.id)) {
             claimedByList.push(interaction.user.id);
-            addStaffAction(interaction.guild.id, interaction.user.id, 'ticketClaims');
+            addStaffAction(interaction.guild.id, interaction.user.id, "ticketClaims");
           }
 
           setTicket(ticketData.userId, {
-            channelId: ticketData.channelId,
-            subject: ticketData.subject,
-            subjectId: ticketData.subjectId,
+            ...ticketData,
             claimedBy: claimedByList
           });
 
           const claimedMentions = claimedByList.length > 0
-            ? claimedByList.map(id => `<@${id}>`).join(', ')
-            : 'Personne';
+            ? claimedByList.map(id => `<@${id}>`).join(", ")
+            : "Personne";
 
           const updatedEmbed = new EmbedBuilder()
-            .setTitle('🎫 Ticket ouvert')
+            .setTitle("🎫 Ticket ouvert")
             .setDescription(
               `**Utilisateur :** <@${ticketData.userId}>\n` +
               `**Sujet :** ${ticketData.subject}\n` +
               `**Statut :** Pris en charge\n` +
               `**Équipe STAFF en charge :** ${claimedMentions}\n\n` +
-              `Explique ta demande dans ce salon.`
+              "Explique ta demande dans ce salon."
             )
             .setColor(0xfaa61a)
             .setTimestamp();
 
           const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setCustomId('ticket_claim_button')
+              .setCustomId("ticket_claim_button")
               .setLabel(buildClaimButtonLabel(claimedByList.length))
               .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
-              .setCustomId('ticket_close_button')
-              .setLabel('Fermer le ticket')
+              .setCustomId("ticket_close_button")
+              .setLabel("Fermer le ticket")
+              .setEmoji("🔒")
               .setStyle(ButtonStyle.Danger)
           );
 
@@ -615,33 +878,64 @@ module.exports = {
             components: [row]
           });
 
-          await sendTicketLog(
-            interaction.guild,
-            ticketData.subjectId,
-            '📌 Ticket pris en charge',
-            `**Utilisateur :** <@${ticketData.userId}>\n` +
-            `**Sujet :** ${ticketData.subject}\n` +
-            `**Staff :** ${claimedMentions}\n` +
-            `**Salon :** ${interaction.channel}`,
-            0xfaa61a
-          );
+          if (ticketData.logChannelId) {
+            const logChannel = interaction.guild.channels.cache.get(ticketData.logChannelId);
+
+            if (logChannel) {
+              const logEmbed = new EmbedBuilder()
+                .setColor(0xfaa61a)
+                .setTitle("📌 Ticket pris en charge")
+                .setDescription(
+                  `**Utilisateur :** <@${ticketData.userId}>\n` +
+                  `**Sujet :** ${ticketData.subject}\n` +
+                  `**Staff :** ${claimedMentions}\n` +
+                  `**Salon :** ${interaction.channel}`
+                )
+                .setTimestamp();
+
+              await logChannel.send({
+                embeds: [logEmbed]
+              });
+            }
+          } else {
+            await sendTicketLog(
+              interaction.guild,
+              ticketData.subjectId,
+              "📌 Ticket pris en charge",
+              `**Utilisateur :** <@${ticketData.userId}>\n` +
+              `**Sujet :** ${ticketData.subject}\n` +
+              `**Staff :** ${claimedMentions}\n` +
+              `**Salon :** ${interaction.channel}`,
+              0xfaa61a
+            );
+          }
 
           return;
         }
 
         /* TICKET CLOSE BUTTON */
-        if (interaction.customId === 'ticket_close_button') {
+        if (interaction.customId === "ticket_close_button") {
           const ticketData = findTicketByChannelId(interaction.channel.id);
 
           if (!ticketData) {
             return interaction.reply({
-              content: '❌ Ce salon n’est pas un ticket.',
+              content: "❌ Ce salon n’est pas un ticket.",
               ephemeral: true
             });
           }
 
           const isOwner = interaction.user.id === ticketData.userId;
-          const staffRole = getConfiguredStaffRole(interaction.guild);
+
+          const config = await GuildConfig.findOne({
+            guildId: interaction.guild.id
+          });
+
+          const mongoStaffRole = config?.staffRoleId
+            ? interaction.guild.roles.cache.get(config.staffRoleId)
+            : null;
+
+          const oldStaffRole = getConfiguredStaffRole(interaction.guild);
+          const staffRole = mongoStaffRole || oldStaffRole;
 
           const hasStaffRole =
             staffRole && interaction.member.roles.cache.has(staffRole.id);
@@ -652,22 +946,22 @@ module.exports = {
 
           if (!isOwner && !hasStaffRole && !canManage) {
             return interaction.reply({
-              content: '❌ Tu ne peux pas fermer ce ticket.',
+              content: "❌ Tu ne peux pas fermer ce ticket.",
               ephemeral: true
             });
           }
 
           const modal = new ModalBuilder()
             .setCustomId(`ticket_close_modal_${interaction.channel.id}`)
-            .setTitle('Fermer le ticket');
+            .setTitle("Fermer le ticket");
 
           const reasonInput = new TextInputBuilder()
-            .setCustomId('close_reason')
-            .setLabel('Raison de la fermeture')
+            .setCustomId("close_reason")
+            .setLabel("Raison de la fermeture")
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(true)
             .setMaxLength(500)
-            .setPlaceholder('Exemple : problème résolu, demande traitée...');
+            .setPlaceholder("Exemple : problème résolu, demande traitée...");
 
           const row = new ActionRowBuilder().addComponents(reasonInput);
           modal.addComponents(row);
@@ -676,20 +970,20 @@ module.exports = {
         }
 
         /* DUEL DECLINE */
-        if (interaction.customId?.startsWith('duel_decline_')) {
-          const duelId = interaction.customId.replace('duel_decline_', '');
+        if (interaction.customId?.startsWith("duel_decline_")) {
+          const duelId = interaction.customId.replace("duel_decline_", "");
           const duel = getDuel(duelId);
 
           if (!duel) {
             return interaction.reply({
-              content: '❌ Duel introuvable.',
+              content: "❌ Duel introuvable.",
               ephemeral: true
             });
           }
 
           if (interaction.user.id !== duel.opponentId) {
             return interaction.reply({
-              content: '❌ Ce duel n’est pas pour toi.',
+              content: "❌ Ce duel n’est pas pour toi.",
               ephemeral: true
             });
           }
@@ -697,46 +991,46 @@ module.exports = {
           deleteDuel(duelId);
 
           return interaction.update({
-            content: '❌ Duel refusé.',
+            content: "❌ Duel refusé.",
             embeds: [],
             components: []
           });
         }
 
         /* DUEL ACCEPT */
-        if (interaction.customId?.startsWith('duel_accept_')) {
-          const duelId = interaction.customId.replace('duel_accept_', '');
+        if (interaction.customId?.startsWith("duel_accept_")) {
+          const duelId = interaction.customId.replace("duel_accept_", "");
           const duel = getDuel(duelId);
 
           if (!duel) {
             return interaction.reply({
-              content: '❌ Duel introuvable.',
+              content: "❌ Duel introuvable.",
               ephemeral: true
             });
           }
 
           if (interaction.user.id !== duel.opponentId) {
             return interaction.reply({
-              content: '❌ Ce duel n’est pas pour toi.',
+              content: "❌ Ce duel n’est pas pour toi.",
               ephemeral: true
             });
           }
 
-          duel.status = 'playing';
+          duel.status = "playing";
           updateDuel(duelId, duel);
 
           const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`duel_choice_${duelId}_pierre`)
-              .setLabel('Pierre')
+              .setLabel("Pierre")
               .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
               .setCustomId(`duel_choice_${duelId}_feuille`)
-              .setLabel('Feuille')
+              .setLabel("Feuille")
               .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
               .setCustomId(`duel_choice_${duelId}_ciseaux`)
-              .setLabel('Ciseaux')
+              .setLabel("Ciseaux")
               .setStyle(ButtonStyle.Secondary)
           );
 
@@ -744,10 +1038,10 @@ module.exports = {
             content: `<@${duel.challengerId}> <@${duel.opponentId}>`,
             embeds: [
               new EmbedBuilder()
-                .setTitle('⚔️ Duel lancé')
+                .setTitle("⚔️ Duel lancé")
                 .setDescription(
-                  `**Mode :** ${duel.mode === 'ranked' ? 'Ranked 🏆' : 'Fun 🎮'}\n\n` +
-                  `Les deux joueurs doivent choisir.`
+                  `**Mode :** ${duel.mode === "ranked" ? "Ranked 🏆" : "Fun 🎮"}\n\n` +
+                  "Les deux joueurs doivent choisir."
                 )
                 .setColor(0x5865f2)
             ],
@@ -756,22 +1050,22 @@ module.exports = {
         }
 
         /* DUEL CHOICE */
-        if (interaction.customId?.startsWith('duel_choice_')) {
-          const parts = interaction.customId.split('_');
+        if (interaction.customId?.startsWith("duel_choice_")) {
+          const parts = interaction.customId.split("_");
           const choice = parts.pop();
-          const duelId = parts.slice(2).join('_');
+          const duelId = parts.slice(2).join("_");
           const duel = getDuel(duelId);
 
           if (!duel) {
             return interaction.reply({
-              content: '❌ Duel introuvable.',
+              content: "❌ Duel introuvable.",
               ephemeral: true
             });
           }
 
           if (![duel.challengerId, duel.opponentId].includes(interaction.user.id)) {
             return interaction.reply({
-              content: '❌ Tu ne participes pas à ce duel.',
+              content: "❌ Tu ne participes pas à ce duel.",
               ephemeral: true
             });
           }
@@ -780,7 +1074,7 @@ module.exports = {
 
           if (duel.choices[interaction.user.id]) {
             return interaction.reply({
-              content: '❌ Tu as déjà choisi.',
+              content: "❌ Tu as déjà choisi.",
               ephemeral: true
             });
           }
@@ -798,22 +1092,22 @@ module.exports = {
             });
           }
 
-          let resultText = 'Égalité 😐';
+          let resultText = "Égalité 😐";
           let winnerId = null;
           let loserId = null;
 
           if (challengerChoice !== opponentChoice) {
             const challengerWins =
-              (challengerChoice === 'pierre' && opponentChoice === 'ciseaux') ||
-              (challengerChoice === 'feuille' && opponentChoice === 'pierre') ||
-              (challengerChoice === 'ciseaux' && opponentChoice === 'feuille');
+              (challengerChoice === "pierre" && opponentChoice === "ciseaux") ||
+              (challengerChoice === "feuille" && opponentChoice === "pierre") ||
+              (challengerChoice === "ciseaux" && opponentChoice === "feuille");
 
             winnerId = challengerWins ? duel.challengerId : duel.opponentId;
             loserId = challengerWins ? duel.opponentId : duel.challengerId;
             resultText = `<@${winnerId}> gagne 🎉`;
           }
 
-          if (winnerId && duel.mode === 'ranked') {
+          if (winnerId && duel.mode === "ranked") {
             addWin(winnerId, loserId, interaction.guild.id);
           }
 
@@ -822,12 +1116,12 @@ module.exports = {
           return interaction.update({
             embeds: [
               new EmbedBuilder()
-                .setTitle('🏁 Résultat du duel')
+                .setTitle("🏁 Résultat du duel")
                 .setDescription(
                   `**<@${duel.challengerId}> :** ${challengerChoice}\n` +
                   `**<@${duel.opponentId}> :** ${opponentChoice}\n\n` +
                   `**Résultat :** ${resultText}` +
-                  `${duel.mode === 'ranked' && winnerId ? '\n\n🏆 Ranked : +25 / -15' : ''}`
+                  `${duel.mode === "ranked" && winnerId ? "\n\n🏆 Ranked : +25 / -15" : ""}`
                 )
                 .setColor(winnerId ? 0x57f287 : 0x99aab5)
                 .setTimestamp()
@@ -849,17 +1143,17 @@ module.exports = {
 
       if (!command) {
         return interaction.reply({
-          content: '❌ Commande introuvable.',
+          content: "❌ Commande introuvable.",
           ephemeral: true
         });
       }
 
       return await command.execute(interaction, client);
     } catch (error) {
-      console.error('❌ Erreur interactionCreate :', error);
+      console.error("❌ Erreur interactionCreate :", error);
 
       return safeReply(interaction, {
-        content: '❌ Une erreur est survenue pendant cette interaction.',
+        content: "❌ Une erreur est survenue pendant cette interaction.",
         ephemeral: true
       });
     }
