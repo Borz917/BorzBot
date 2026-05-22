@@ -1,18 +1,20 @@
 {
-  "name": "borzbot",
+  "name": "borzbot-pro-max",
   "version": "1.0.0",
-  "description": "Bot Discord BorzBot",
   "main": "main.js",
   "scripts": {
     "start": "node main.js",
-    "dev": "node main.js",
-    "deploy": "node deploy-commands.js"
+    "clear": "node clear-global-commands.js",
+    "deploy": "node deploy-commands.js",
+    "dashboard": "node dashboard/server.js"
   },
   "dependencies": {
-    "discord.js": "^14.18.0",
-    "dotenv": "^16.4.7"
-  },
-  "engines": {
-    "node": ">=20.0.0"
+    "cors": "^2.8.6",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "express-session": "^1.18.1",
+    "mongoose": "^8.24.0",
+    "ms": "^2.1.3"
   }
 }
